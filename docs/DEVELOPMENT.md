@@ -1,6 +1,6 @@
 # Development and handoff
 
-Shotlight has two native applications: macOS 0.7 (Swift/AppKit, Apple silicon, macOS 13+) and Windows 1.1 (C#/.NET 10, WPF/WinForms, Windows 11 x64). Source is organized by platform; history formats and settings are local to each app.
+Shotlight has two native applications: macOS 0.7 (Swift/AppKit, Apple silicon, macOS 13+) and Windows 1.2 (C#/.NET 10, WPF/WinForms, Windows 11 x64). Source is organized by platform; history formats and settings are local to each app.
 
 ## Working across computers
 
@@ -68,7 +68,7 @@ Before relying on a new build, test the applicable platform manually:
 - Close an unsaved capture, reopen it from Recent Captures, and verify its annotations after quitting and restarting.
 - Change the global shortcut and try an occupied combination. Invalid retention values should show beside the retention field. Cancel a reduction in generated test history and confirm no drafts are removed.
 - Resize the editor while Fit is selected; confirm all capture edges remain visible. Choose 100% and verify resizing preserves the chosen scale. Check text size and stroke width independently.
-- Check the one-time welcome with an isolated preferences domain. Later launches should stay in the menu bar without an About alert.
+- Check the one-time welcome with isolated preferences. Later launches should stay in the menu bar without an About alert.
 
 CI generated-image tests cannot establish real display capture, monitor scaling, global hotkey registration, or real clipboard integration. Test those on the user's machine.
 
@@ -82,6 +82,8 @@ The Windows workflow publishes a `Windows-interface-previews` artifact containin
 
 To render them locally on Windows, launch `Shotlight.exe --render-previews PATH_TO_OUTPUT_FOLDER` and wait for the process to finish. Shared control styles live in `windows/Shotlight/Theme.xaml`; native vector icons and layout helpers live in `Ui.cs`. The annotation text box retains its transparent canvas-specific styling.
 
-Both platforms use a compact floating toolbar. History, previous/next navigation, additional zoom levels, and settings are accessed from its More menu. Mac also exposes Fit/100%, a zoom percentage, contextual stroke/font sizes, and a labeled Copy/Copy & Close action. Copy closes by default; the saved Mac preference applies to both button and Command-C, including already-open editors. Regression checks exercise both copy modes with an isolated clipboard, compact fitting and Retina export, live/legacy annotated thumbnails, inline validation, and retention confirmation/cancellation. The Mac interface uses native symbols and follows system light/dark appearance.
+Both platforms use a compact floating toolbar. History, previous/next navigation, additional zoom levels, and settings are accessed from its More menu. Both expose Fit/100%, a zoom percentage, contextual stroke/font sizes, and a labeled Copy/Copy & Close action. Copy closes by default; the saved preference on either platform applies to both button and Command-C / Ctrl+C, including already-open editors. Regression checks exercise both copy modes with an isolated clipboard, compact fitting and original-resolution export, live/legacy annotated thumbnails, inline validation, and retention confirmation/cancellation. The Mac interface uses native symbols and follows system light/dark appearance.
+
+Windows renders also include the keep-open Copy mode, a short settings window with an inline retention error, and the one-time welcome.
 
 Mac interface renders are available with `./macos/artifacts/Shotlight.app/Contents/MacOS/Shotlight --render-previews OUTPUT_DIRECTORY`. This renders native views with generated images and temporary history, including the light and dark editor, a compact editor, the keep-open Copy mode, annotated history, light/dark settings, validation at a short window height, and the welcome screen.

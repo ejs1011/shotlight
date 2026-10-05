@@ -12,6 +12,7 @@ public sealed record CaptureDraft
     public List<Annotation> Marks { get; init; } = [];
     public List<List<Annotation>> UndoHistory { get; init; } = [];
     public List<List<Annotation>> RedoHistory { get; init; } = [];
+    public int ThumbnailVersion { get; init; }
     public void Validate()
     {
         if (FormatVersion != 1 || Id == Guid.Empty || Width <= 0 || Height <= 0 ||
@@ -76,9 +77,10 @@ public sealed class CaptureStore
     public CaptureDraft Get(Guid id) => Records.FirstOrDefault(r => r.Id == id) ?? throw new FileNotFoundException("This screenshot is no longer in recent history.");
     public byte[] Original(Guid id) { _ = Get(id); return File.ReadAllBytes(Path.Combine(Folder(id), "original.png")); }
     public byte[] Thumbnail(Guid id) { _ = Get(id); string path = Path.Combine(Folder(id), "thumbnail.png"); return File.ReadAllBytes(File.Exists(path) ? path : Path.Combine(Folder(id), "original.png")); }
+    public bool ThumbnailIsCurrent(Guid id) => Get(id).ThumbnailVersion == 1 && File.Exists(Path.Combine(Folder(id), "thumbnail.png"));
     public CaptureDraft Add(byte[] png, byte[] thumbnail, int width, int height, DateTimeOffset? at = null)
     {
-        var draft = new CaptureDraft { Id = Guid.NewGuid(), CapturedAt = at ?? DateTimeOffset.Now, Width = width, Height = height };
+        var draft = new CaptureDraft { Id = Guid.NewGuid(), CapturedAt = at ?? DateTimeOffset.Now, Width = width, Height = height, ThumbnailVersion = 1 };
         draft.Validate();
         if (png.Length == 0) throw new InvalidDataException("The screenshot is empty.");
         string pending = Path.Combine(Root, ".pending-" + draft.Id.ToString("N"));
@@ -93,10 +95,21 @@ public sealed class CaptureStore
         catch { if (Directory.Exists(pending)) Directory.Delete(pending, recursive: true); throw; }
         Records.Add(draft); Sort(); Trim(); Changed?.Invoke(); return draft;
     }
-    public void Save(Guid id, DocumentSnapshot snapshot)
+    public void Save(Guid id, DocumentSnapshot snapshot, byte[]? thumbnail = null)
     {
-        var updated = Get(id) with { Marks = AnnotationDocument.Copy(snapshot.Marks), UndoHistory = AnnotationDocument.CopyHistory(snapshot.Undo), RedoHistory = AnnotationDocument.CopyHistory(snapshot.Redo) };
+        var previous = Get(id);
+        bool changed = !AnnotationDocument.Equal(previous.Marks, snapshot.Marks);
+        var updated = previous with { Marks = AnnotationDocument.Copy(snapshot.Marks), UndoHistory = AnnotationDocument.CopyHistory(snapshot.Undo), RedoHistory = AnnotationDocument.CopyHistory(snapshot.Redo), ThumbnailVersion = thumbnail is not null ? 1 : changed ? 0 : previous.ThumbnailVersion };
         updated.Validate();
+        if (thumbnail is not null) AtomicFile.Write(Path.Combine(Folder(id), "thumbnail.png"), thumbnail);
+        AtomicFile.Write(Path.Combine(Folder(id), "draft.json"), JsonSerializer.SerializeToUtf8Bytes(updated, Json));
+        Records[Records.FindIndex(r => r.Id == id)] = updated;
+        if (changed) Changed?.Invoke();
+    }
+    public void UpdateThumbnail(Guid id, byte[] thumbnail)
+    {
+        var updated = Get(id) with { ThumbnailVersion = 1 };
+        AtomicFile.Write(Path.Combine(Folder(id), "thumbnail.png"), thumbnail);
         AtomicFile.Write(Path.Combine(Folder(id), "draft.json"), JsonSerializer.SerializeToUtf8Bytes(updated, Json));
         Records[Records.FindIndex(r => r.Id == id)] = updated;
     }
@@ -134,6 +147,8 @@ public sealed record UserSettings
 {
     public CaptureShortcut Shortcut { get; init; } = CaptureShortcut.Default;
     public int HistoryLimit { get; init; } = 50;
+    public bool CloseEditorAfterCopy { get; init; } = true;
+    public bool HasSeenWelcome { get; init; }
     public static UserSettings Load(string path)
     {
         if (!File.Exists(path)) return new();

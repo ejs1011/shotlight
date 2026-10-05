@@ -15,8 +15,14 @@ internal sealed class AnnotationCanvas : Controls.Canvas
     public Tool Tool { get; set; } = Tool.Arrow;
     private uint argb = 0xFFFF3B30;
     private float strokeWidth = 4;
+    private float fontSizePoints = 24;
     public uint Argb { get => argb; set { argb = value; if (editing is not null) { editing = editing with { Argb = value }; RefreshText(); } } }
-    public float StrokeWidth { get => strokeWidth; set { strokeWidth = value; if (editing is not null) { editing = editing with { Width = value }; RefreshText(); } } }
+    public float StrokeWidth { get => strokeWidth; set => strokeWidth = value; }
+    public float FontSizePoints
+    {
+        get => editing is null ? fontSizePoints : Math.Max(16, editing.Width*6)*.75f;
+        set { fontSizePoints = value; if (editing is not null) { editing = editing with { Width = value/4.5f }; RefreshText(); } }
+    }
     private Annotation? current;
     private Controls.TextBox? textBox;
     private TextDraft? editing;
@@ -126,7 +132,8 @@ internal sealed class AnnotationCanvas : Controls.Canvas
     internal void BeginText(PixelPoint position, int? index = null)
     {
         FinishText(); var mark = index is int i ? Document.Marks[i] : null;
-        editing = new(index,mark?.Points[0] ?? position,mark?.Argb ?? argb,mark?.Width ?? strokeWidth,mark?.Text ?? "");
+        if (mark is not null) fontSizePoints = Math.Max(16, mark.Width*6)*.75f;
+        editing = new(index,mark?.Points[0] ?? position,mark?.Argb ?? argb,mark?.Width ?? fontSizePoints/4.5f,mark?.Text ?? "");
         var box = new Controls.TextBox
         {
             Text = editing.Text, AcceptsReturn = true, AcceptsTab = false, TextWrapping = Wpf.TextWrapping.NoWrap,
@@ -166,6 +173,25 @@ internal sealed class AnnotationCanvas : Controls.Canvas
     public DocumentSnapshot DraftSnapshot() => Document.Snapshot(editing is null ? null : editing with { Text = textBox?.Text ?? editing.Text });
     public void Undo() { FinishText(); Document.Undo(); InvalidateVisual(); Changed?.Invoke(); }
     public void Redo() { FinishText(); Document.Redo(); InvalidateVisual(); Changed?.Invoke(); }
+    public byte[] ThumbnailPng(IReadOnlyList<Annotation> marks) => ThumbnailPng(Original, marks);
+    internal static byte[] ThumbnailPng(Imaging.BitmapSource original, IReadOnlyList<Annotation> marks)
+    {
+        var visual = new Media.DrawingVisual();
+        using (var g = visual.RenderOpen())
+        {
+            g.DrawRectangle(Media.Brushes.WhiteSmoke, null, new Wpf.Rect(0,0,240,150));
+            double scale = Math.Min(240d/original.PixelWidth, 150d/original.PixelHeight);
+            g.PushTransform(new Media.TranslateTransform((240-original.PixelWidth*scale)/2, (150-original.PixelHeight*scale)/2));
+            g.PushTransform(new Media.ScaleTransform(scale,scale));
+            g.PushClip(new Media.RectangleGeometry(new Wpf.Rect(0,0,original.PixelWidth,original.PixelHeight)));
+            g.DrawImage(original, new Wpf.Rect(0,0,original.PixelWidth,original.PixelHeight));
+            foreach (var mark in marks) DrawMark(g,mark);
+            g.Pop(); g.Pop(); g.Pop();
+        }
+        var bitmap = new Imaging.RenderTargetBitmap(240,150,96,96,Media.PixelFormats.Pbgra32); bitmap.Render(visual);
+        var encoder = new Imaging.PngBitmapEncoder(); encoder.Frames.Add(Imaging.BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream(); encoder.Save(stream); return stream.ToArray();
+    }
     public byte[] ExportPng()
     {
         FinishText(); var visual = new Media.DrawingVisual();

@@ -8,7 +8,7 @@ namespace Shotlight;
 internal static class Ui
 {
     public static Media.SolidColorBrush Brush(string hex) => new((Media.Color)Media.ColorConverter.ConvertFromString(hex));
-    public static readonly Media.Brush Ink = Brush("#202637"), Muted = Brush("#687386"), Accent = Brush("#5265E9"), Line = Brush("#E1E5ED");
+    public static readonly Media.Brush Ink = Brush("#202637"), Muted = Brush("#687386"), Accent = Brush("#5265E9"), Line = Brush("#E9ECF2");
     public static void Apply(Wpf.Window window)
     {
         window.Resources.MergedDictionaries.Add(new Wpf.ResourceDictionary { Source = new Uri("/Shotlight;component/Theme.xaml",UriKind.Relative) });
@@ -67,7 +67,7 @@ internal static class Ui
     }
     public static Controls.Border Card(Wpf.UIElement content, Wpf.Thickness? padding = null) => new()
     { Child = content, Background = Media.Brushes.White, BorderBrush = Line, BorderThickness = new Wpf.Thickness(1), CornerRadius = new Wpf.CornerRadius(12), Padding = padding ?? new Wpf.Thickness(20) };
-    public static Controls.Border Divider() => new() { Width = 1, Height = 22, Background = Line, Margin = new Wpf.Thickness(5,0,7,0) };
+    public static Controls.Border Divider() => new() { Width = 1, Height = 22, Background = Line, Margin = new Wpf.Thickness(4,0,4,0) };
     public static Controls.ContextMenu Menu()
     {
         var menu = new Controls.ContextMenu { Placement = Controls.Primitives.PlacementMode.Top, VerticalOffset = -8 };

@@ -86,8 +86,8 @@ internal static class WindowsChecks
                 }
                 var editor = owner.OpenNew(source); Guid original = editor.CaptureId;
                 var buttons = Descendants(editor).OfType<Controls.Button>().ToArray();
-                var size = buttons.Single(button => button.ToolTip is string hint && hint.StartsWith("Stroke & text size"));
-                var thick = size.ContextMenu.Items.OfType<Controls.MenuItem>().Single(item => Equals(item.Header,"Thick"));
+                var size = buttons.Single(button => button.ToolTip is string hint && hint == "Stroke width");
+                var thick = size.ContextMenu.Items.OfType<Controls.MenuItem>().Single(item => Equals(item.Header,"8 px"));
                 thick.RaiseEvent(new Wpf.RoutedEventArgs(Controls.MenuItem.ClickEvent));
                 Require(editor.Canvas.StrokeWidth == 8,"Compact size menu did not update the annotation size.");
                 var more = buttons.Single(button => button.ToolTip is string hint && hint.StartsWith("More ·")).ContextMenu;
@@ -107,7 +107,76 @@ internal static class WindowsChecks
                 more.Items.OfType<Controls.MenuItem>().Single(item => Equals(item.Header,"Previous capture")).RaiseEvent(new Wpf.RoutedEventArgs(Controls.MenuItem.ClickEvent));
                 Require(editor.CaptureId != original && owner.TestStore.Contains(original),"History navigation lost the original capture."); editor.Close();
             });
-
+            Check("both copy modes honor settings for Ctrl+C, buttons and existing editors",() =>
+            {
+                int copies = 0; var editor = owner.OpenNew(source,image => { Require(image.Width == 400 && image.Height == 240,"Copy resolution changed."); copies++; });
+                Guid id = editor.CaptureId;
+                Require(owner.ApplySettings(owner.Settings with { CloseEditorAfterCopy = false }) is null,"Could not apply copy setting.");
+                Require(!editor.CloseEditorAfterCopy && Wpf.Automation.AutomationProperties.GetName(editor.CopyButton) == "Copy","Existing editor did not update its copy label.");
+                editor.Canvas.BeginText(new(30,30)); editor.Canvas.Children.OfType<Controls.TextBox>().Single().Text = "Keep this draft";
+                editor.HandleShortcut(Input.Key.C,Input.ModifierKeys.Control);
+                Require(copies == 1 && editor.IsVisible && !editor.Canvas.IsEditing,"Ctrl+C did not keep the editor open.");
+                editor.CopyButton.RaiseEvent(new Wpf.RoutedEventArgs(Controls.Button.ClickEvent));
+                Require(copies == 2 && editor.IsVisible && new CaptureStore(owner.TestStore.Root).Get(id).Marks.Single().Text == "Keep this draft","Toolbar copy lost the draft or closed the editor.");
+                Require(owner.ApplySettings(owner.Settings with { CloseEditorAfterCopy = true }) is null,"Could not restore close-on-copy.");
+                editor.CopyButton.RaiseEvent(new Wpf.RoutedEventArgs(Controls.Button.ClickEvent));
+                Require(copies == 3 && !editor.IsVisible,"Toolbar did not close when configured.");
+                var reopened = new UserSettings { CloseEditorAfterCopy = false, HasSeenWelcome = true }; string path = Path.Combine(root,"copy-check.json"); reopened.Save(path);
+                Require(UserSettings.Load(path) == reopened,"Settings did not survive restart.");
+            });
+            Check("fit follows compact resizing and explicit 100% preserves export resolution",() =>
+            {
+                using var large = new Bitmap(900,460); var editor = owner.OpenNew(large); editor.Width = 760; editor.Height = 460; editor.UpdateLayout(); editor.FitToWindow(); editor.UpdateLayout();
+                editor.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                var transform = (System.Windows.Media.ScaleTransform)editor.Canvas.LayoutTransform;
+                Require(editor.IsFittingPreview && transform.ScaleX < 1 && editor.PreviewScroll.ExtentWidth <= editor.PreviewScroll.ViewportWidth+1 && editor.PreviewScroll.ExtentHeight <= editor.PreviewScroll.ViewportHeight+1,"Fit clipped the image in a compact editor.");
+                var toolbar = (Wpf.FrameworkElement)Wpf.LogicalTreeHelper.GetParent(editor.CopyButton);
+                var content = (Wpf.FrameworkElement)editor.Content; var bounds = toolbar.TransformToAncestor(content).TransformBounds(new Wpf.Rect(toolbar.RenderSize));
+                Require(bounds.Left >= 0 && bounds.Right <= content.ActualWidth,"Compact editor clipped the toolbar actions.");
+                editor.SetZoom(1); editor.Width = 820; editor.UpdateLayout(); editor.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                Require(!editor.IsFittingPreview && ((System.Windows.Media.ScaleTransform)editor.Canvas.LayoutTransform).ScaleX == 1,"Resizing discarded the chosen 100% scale.");
+                using var output = ImageFiles.Read(editor.Canvas.ExportPng()); Require(output.Width == 900 && output.Height == 460,"Fit changed exported pixels."); editor.Close();
+            });
+            Check("text sizes use points independently of drawing width and preserve old annotations",() =>
+            {
+                var editor = owner.OpenNew(source); editor.Canvas.StrokeWidth = 8; editor.Canvas.BeginText(new(20,20));
+                editor.Canvas.FontSizePoints = 16; var box = editor.Canvas.Children.OfType<Controls.TextBox>().Single(); box.Text = "Sized text";
+                Require(Math.Abs(box.FontSize-16*96d/72) < .01 && editor.Canvas.StrokeWidth == 8,"Point sizing changed stroke width or font units.");
+                editor.Canvas.FinishText(); editor.Canvas.BeginText(new(20,20),0);
+                Require(Math.Abs(editor.Canvas.FontSizePoints-16) < .01,"Edited text size was not restored."); editor.Canvas.FinishText();
+                editor.Canvas.Document.Add(new(Tool.Text,[new(20,80)],0xFFFF0000,4,"Legacy text")); editor.Canvas.BeginText(new(20,80),1);
+                Require(editor.Canvas.FontSizePoints == 18 && editor.Canvas.Children.OfType<Controls.TextBox>().Single().FontSize == 24,"Legacy text changed its rendered size.");
+                editor.Canvas.FinishText(); editor.Close();
+            });
+            Check("history thumbnails refresh annotations, undo and older cached drafts",() =>
+            {
+                var editor = owner.OpenNew(source); var store = owner.TestStore; Guid id = editor.CaptureId; byte[] original = store.Original(id);
+                editor.Canvas.Document.Add(new(Tool.Rectangle,[new(20,20),new(80,80)],0xFFFF0000,4)); Require(editor.Flush(),"Could not save annotated thumbnail.");
+                using (var thumb = ImageFiles.Read(store.Thumbnail(id))) { var red = thumb.GetPixel(12,27); Require(red.R > 230 && red.G < 20,"Thumbnail omitted annotations."); }
+                editor.Canvas.Undo(); Require(editor.Flush(),"Undo did not save.");
+                using (var thumb = ImageFiles.Read(store.Thumbnail(id))) Require(thumb.GetPixel(12,27).R < 100,"Undo left a stale annotation preview.");
+                editor.Canvas.Redo(); store.Save(id,editor.Canvas.DraftSnapshot()); Require(!store.ThumbnailIsCurrent(id),"Old cache was not invalidated.");
+                var history = new HistoryWindow(store,_ => { });
+                Require(store.ThumbnailIsCurrent(id) && store.Original(id).SequenceEqual(original),"Older cache upgrade changed original pixels.");
+                using (var thumb = ImageFiles.Read(store.Thumbnail(id))) Require(thumb.GetPixel(12,27).R > 230,"Older cache upgrade omitted annotations.");
+                history.Close(); editor.Close();
+            });
+            Check("settings show inline errors and actual retention counts and respect cancellation",() =>
+            {
+                int applied = 0, confirmed = 0; UserSettings? saved = null;
+                var settings = new SettingsWindow(new UserSettings { HasSeenWelcome = true },candidate => { applied++; saved = candidate; return null; },() => { },() => 5) { Height = 480 };
+                settings.Show(); settings.UpdateLayout(); settings.LimitField.Text = "0"; settings.SaveChanges(); settings.UpdateLayout();
+                settings.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                Require(applied == 0 && settings.HistoryError.Visibility == Wpf.Visibility.Visible && settings.ShortcutError.Visibility == Wpf.Visibility.Collapsed,"Retention error appeared in the shortcut section.");
+                var errorBounds = settings.HistoryError.TransformToAncestor(settings.BodyScroll).TransformBounds(new Wpf.Rect(settings.HistoryError.RenderSize));
+                var fieldBounds = settings.LimitField.TransformToAncestor(settings.BodyScroll).TransformBounds(new Wpf.Rect(settings.LimitField.RenderSize));
+                Require(fieldBounds.Top >= 0 && errorBounds.Bottom <= settings.BodyScroll.ViewportHeight+1,"Focused retention field scrolled its error out of view.");
+                settings.LimitField.Text = "2";
+                Require(settings.RetentionWarning.Text.Contains("remove 3 older drafts"),"Warning did not show the actual removal count.");
+                settings.ConfirmReduction = (limit,count) => { confirmed = count; return false; }; settings.SaveChanges(); Require(applied == 0 && confirmed == 3,"Cancelled reduction applied settings.");
+                settings.ConfirmReduction = (_,_) => true; settings.CloseOnCopy.IsChecked = false; settings.SaveChanges();
+                Require(applied == 1 && saved?.HistoryLimit == 2 && saved.CloseEditorAfterCopy == false && saved.HasSeenWelcome,"Confirmed settings lost the copy/welcome preference.");
+            });
         }
         catch (Exception error) { failed++; report.AppendLine("FAIL: check setup\n" + error); }
         finally

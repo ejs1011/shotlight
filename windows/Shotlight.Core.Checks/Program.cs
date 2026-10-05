@@ -98,6 +98,33 @@ try
         settings.Save(path); Require(UserSettings.Load(path) == settings && settings.Shortcut.Display == "Ctrl+Shift+K","Settings were not restored.");
         Require(!new CaptureShortcut(0x43,2,"C").Valid && !new CaptureShortcut(0x53,4,"S").Valid && !new CaptureShortcut(0x7B,2,"F12").Valid,"A reserved or modifier-free hotkey was allowed.");
     });
+    Check("copy and welcome preferences persist while older settings keep copy-close enabled",() =>
+    {
+        string path = Path.Combine(root,"copy-settings.json"); File.WriteAllText(path,"{\"HistoryLimit\":50}");
+        Require(UserSettings.Load(path).CloseEditorAfterCopy && !UserSettings.Load(path).HasSeenWelcome,"Old settings changed default copy behavior.");
+        var settings = UserSettings.Load(path) with { CloseEditorAfterCopy = false, HasSeenWelcome = true };
+        settings.Save(path); Require(UserSettings.Load(path) == settings,"Copy/welcome preferences did not persist.");
+    });
+    Check("edited thumbnail invalidation and upgrades preserve originals and undo",() =>
+    {
+        var store = new CaptureStore(Path.Combine(root,"thumbnails")); var record = store.Add(png,png,1,1);
+        var document = new AnnotationDocument(); document.Add(Text("edited")); store.Save(record.Id,document.Snapshot());
+        Require(!store.ThumbnailIsCurrent(record.Id),"A stale thumbnail was marked current.");
+        byte[] updated = [1,2,3]; store.UpdateThumbnail(record.Id,updated);
+        var reopened = new CaptureStore(store.Root);
+        Require(reopened.ThumbnailIsCurrent(record.Id) && reopened.Thumbnail(record.Id).SequenceEqual(updated) && reopened.Original(record.Id).SequenceEqual(png),"Thumbnail refresh changed original pixels.");
+        var restored = new AnnotationDocument(reopened.Get(record.Id)); restored.Undo();
+        Require(restored.Marks.Count == 0,"Thumbnail refresh discarded undo history.");
+    });
+    Check("fit shows all image edges without enlarging small captures",() =>
+    {
+        foreach (var (width,height) in new[] { (900d,460d),(460d,900d),(8000d,4000d) })
+        {
+            double scale = PreviewScale.Fit(width,height,680,400);
+            Require(width*scale <= 624.001 && height*scale <= 344.001,"Fit clipped an image edge.");
+        }
+        Require(PreviewScale.Fit(200,100,680,400) == 1,"Fit enlarged a small screenshot.");
+    });
     Check("invalid annotation coordinates and invalid saved settings are rejected",() =>
     {
         Reject(() => (Text("invalid") with { Points = [new(float.NaN,20)] }).Validate());

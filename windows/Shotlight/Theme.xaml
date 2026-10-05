@@ -3,7 +3,7 @@
   <SolidColorBrush x:Key="Ink" Color="#202637"/>
   <SolidColorBrush x:Key="Muted" Color="#687386"/>
   <SolidColorBrush x:Key="Accent" Color="#5265E9"/>
-  <SolidColorBrush x:Key="Line" Color="#E1E5ED"/>
+  <SolidColorBrush x:Key="Line" Color="#E9ECF2"/>
   <Style x:Key="ButtonBase" TargetType="ButtonBase">
     <Setter Property="Foreground" Value="{StaticResource Ink}"/>
     <Setter Property="Background" Value="White"/>
