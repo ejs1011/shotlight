@@ -1,9 +1,16 @@
-SHOTLIGHT 0.5 — frozen screenshot capture, annotation, and recent history
+SHOTLIGHT 0.6 — frozen screenshot capture, annotation, and recent history
 
 Requires macOS 13 or later and an Apple silicon Mac.
 
+WHAT IS NEW IN 0.6
+A compact floating icon toolbar keeps the screenshot front and center.
+Hover an icon for its label. The indigo Copy button copies and closes;
+More (•••) contains recent captures, previous/next, zoom, and settings.
+Recent Captures now uses thumbnail cards and Settings groups its controls.
+The Mac interface follows the system light or dark appearance.
+
 GET STARTED
-Quit the previous version, unzip Shotlight-0.5.zip, and open Shotlight.app.
+Quit the previous version, unzip Shotlight-macOS-arm64-0.6.zip, and open Shotlight.app.
 It runs from the camera icon in the menu bar. Choose Capture Area or press
 your capture shortcut (Control–Shift–S by default). The whole desktop is
 captured first and stays frozen while you drag a rectangle. Releasing the
@@ -20,7 +27,7 @@ Only the selected area enters history; cancelling creates no capture.
 
 RECOVER A SCREENSHOT
 Every new capture is retained automatically before its editor opens.
-Open Recent Captures from the menu bar or an editor. Click a thumbnail to
+Open Recent Captures from the menu bar or the editor’s More (•••) menu. Click a thumbnail to
 reopen that screenshot. The browser shows capture times, newest first.
 Previous moves to an older capture; Next moves to a newer one.
 Closing, saving, or copying a capture keeps it in history.
@@ -50,12 +57,12 @@ and commit to remove it. Color and line-width controls update text live.
 
 Command–C and Copy & Close export an annotated PNG to the clipboard and
 close the editor. Text being edited is committed before copying.
-Command–S exports a PNG to your chosen folder. Large images can be scrolled.
+Command–S exports a PNG to your chosen folder. Large images can be scrolled. More → Zoom adjusts the preview only.
 Export preserves the original pixel resolution. PNG exports are flattened;
 editable drafts stay in Recent Captures.
 
 SHORTCUT SETTINGS
-Choose Settings from the menu bar or the editor. Click Capture shortcut,
+Choose Settings from the menu bar or the editor’s More (•••) menu. Click Capture shortcut,
 press a combination, and Save. Include Command, Control, or Option.
 Command–C is reserved for copying captures. If a shortcut cannot be
 registered, the prior one remains active. Restore Default selects

@@ -40,6 +40,9 @@ internal static class Ui
             "History" => "M 3,8 A 7,7 0 1 1 3,13 M 3,3 L 3,8 8,8 M 10,6 L 10,10 13,12",
             "Settings" => "M 3,5 L 17,5 M 3,10 L 17,10 M 3,15 L 17,15 M 7,2 L 7,8 M 13,7 L 13,13 M 8,12 L 8,18",
             "Check" => "M 4,10 L 8,14 16,6",
+            "More" => "M 3,10 L 3.1,10 M 10,10 L 10.1,10 M 17,10 L 17.1,10",
+            "Weight" => "M 3,4 L 17,4 M 3,10 L 17,10 M 3,16 L 17,16 M 3,17 L 17,17",
+            "Zoom" => "M 13,13 L 18,18 M 15,8 A 7,7 0 1 1 1,8 A 7,7 0 1 1 15,8 M 5,8 L 11,8 M 8,5 L 8,11",
             "Trash" => "M 3,5 L 17,5 M 7,5 L 7,2 13,2 13,5 M 5,5 L 6,18 14,18 15,5 M 8,8 L 8,15 M 12,8 L 12,15",
             _ => "M 3,10 L 17,10"
         };
@@ -64,6 +67,22 @@ internal static class Ui
     }
     public static Controls.Border Card(Wpf.UIElement content, Wpf.Thickness? padding = null) => new()
     { Child = content, Background = Media.Brushes.White, BorderBrush = Line, BorderThickness = new Wpf.Thickness(1), CornerRadius = new Wpf.CornerRadius(12), Padding = padding ?? new Wpf.Thickness(20) };
-    public static Controls.Border Divider() => new() { Width = 1, Height = 24, Background = Line, Margin = new Wpf.Thickness(8,0,14,0) };
+    public static Controls.Border Divider() => new() { Width = 1, Height = 22, Background = Line, Margin = new Wpf.Thickness(5,0,7,0) };
+    public static Controls.ContextMenu Menu()
+    {
+        var menu = new Controls.ContextMenu { Placement = Controls.Primitives.PlacementMode.Top, VerticalOffset = -8 };
+        menu.Resources.MergedDictionaries.Add(new Wpf.ResourceDictionary { Source = new Uri("/Shotlight;component/Theme.xaml",UriKind.Relative) });
+        return menu;
+    }
+    public static Controls.MenuItem MenuItem(string text, Action click, string? icon = null)
+    {
+        var item = new Controls.MenuItem { Header = text }; if (icon is not null) item.Icon = Icon(icon);
+        item.Click += (_,_) => click(); return item;
+    }
+    public static void AttachMenu(Controls.Button button, Controls.ContextMenu menu)
+    {
+        button.ContextMenu = menu;
+        button.Click += (_,_) => { menu.PlacementTarget = button; menu.IsOpen = true; };
+    }
     public static void Error(string title, Exception error) => Wpf.MessageBox.Show(error.Message,title,Wpf.MessageBoxButton.OK,Wpf.MessageBoxImage.Error);
 }

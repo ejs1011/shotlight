@@ -3,9 +3,10 @@ SHOTLIGHT 1.1 FOR WINDOWS — personal, local screenshot capture
 Target: Windows 11 on an Intel/AMD 64-bit (x64) PC.
 
 WHAT IS NEW IN 1.1
-A refreshed interface with rounded controls, vector tool icons, quick color
-swatches, an indigo Copy & Close action, a centered screenshot workspace,
-thumbnail cards in Recent Captures, and reorganized Settings.
+A compact floating toolbar with rounded icon buttons, hover labels, and
+an indigo Copy & Close action. Color and stroke size open small menus.
+More (•••) contains recent captures, previous/next, zoom, and settings.
+Recent Captures uses thumbnail cards and Settings groups its controls.
 
 GET STARTED
 Extract Shotlight-Windows-x64-1.1.zip to a folder, then double-click
@@ -32,11 +33,11 @@ type directly over the screenshot with a transparent background.
 Enter commits text; Shift+Enter adds a line; Escape cancels the edit.
 Click an existing text annotation with the Text tool to edit it again.
 Clear its text and commit to remove it. Color and width controls update
-the active text. The selected drawing tool has an indigo highlight. Quick color swatches
-and a custom color picker sit beside the stroke-size control.
+the active text. The selected drawing tool has an indigo highlight. Click the color dot
+for presets or a custom color; the adjacent line icon controls stroke size.
 
 Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes. Undo/redo also works for text
-edits. Zoom controls change the editor preview, not the exported pixels.
+edits. More → Zoom changes the editor preview, not the exported pixels.
 Large screenshots can be scrolled in both directions.
 
 COPY AND SAVE

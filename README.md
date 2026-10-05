@@ -6,7 +6,7 @@ A personal screenshot app for Apple silicon Macs and Windows 11 x64 PCs. Capture
 
 Download an app ZIP from [Releases](https://github.com/ejs1011/shotlight/releases/latest):
 
-- **Mac:** `Shotlight-macOS-arm64-0.5.zip`. Requires macOS 13 or later and Apple silicon. Extract and open `Shotlight.app`, then allow Screen Recording when prompted.
+- **Mac:** `Shotlight-macOS-arm64-0.6.zip`. Requires macOS 13 or later and Apple silicon. Extract and open `Shotlight.app`, then allow Screen Recording when prompted.
 - **Windows:** `Shotlight-Windows-x64-1.1.zip`. Requires Windows 11 on Intel/AMD x64. Extract and run `Shotlight.exe`. The .NET runtime is included.
 
 These are personal builds without a paid publisher certificate or Apple notarization. The Mac app is locally signed.
@@ -14,7 +14,9 @@ These are personal builds without a paid publisher certificate or Apple notariza
 ## Features
 
 - Freeze the desktop before drawing the capture rectangle; select an area on any connected display.
+- A compact floating toolbar with icon buttons and hover labels on both platforms.
 - Pen, arrow, rectangle, and editable text directly on the screenshot.
+- History, zoom, and settings tucked into the toolbar’s **More (•••)** menu.
 - Configurable global capture shortcut, initially **Ctrl+Shift+S**.
 - **Command+C** on Mac or **Ctrl+C** on Windows copies the annotated screenshot and closes its editor.
 - Save PNGs at the original pixel resolution.

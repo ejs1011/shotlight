@@ -70,7 +70,7 @@ final class ShortcutSettingsController: NSWindowController {
     init(shortcut: CaptureShortcut, historyLimit: Int, clearHistory: @escaping () -> Void, apply: @escaping (CaptureShortcut, Int) -> String?) {
         draft = shortcut; self.apply = apply; self.clearHistory = clearHistory; limitField.stringValue = String(historyLimit)
         let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 470,height: 340),styleMask: [.titled,.closable],backing: .buffered,defer: false)
-        super.init(window: window); window.title = "Shotlight Settings"; window.center(); window.isReleasedWhenClosed = false
+        super.init(window: window); window.contentView = BackgroundView(frame: window.contentView!.bounds); window.title = "Shotlight Settings"; window.center(); window.isReleasedWhenClosed = false
         recorder.title = draft.label; recorder.bezelStyle = .rounded
         recorder.target = recorder; recorder.action = #selector(ShortcutRecorder.beginRecording)
         recorder.setAccessibilityLabel("Capture shortcut")
@@ -79,21 +79,36 @@ final class ShortcutSettingsController: NSWindowController {
             if let shortcut { self.draft = shortcut }
             self.recorder.title = self.draft.label
         }
-        let label = NSTextField(labelWithString: "Capture shortcut")
-        label.font = .systemFont(ofSize: 15,weight: .semibold)
+        let title = ShotlightUI.label("Make it yours",size: 26,weight: .semibold)
+        let subtitle = ShotlightUI.label("Your shortcuts. Your captures. All local.",secondary: true)
+        let label = ShotlightUI.label("Capture shortcut",size: 15,weight: .semibold)
         message.font = .systemFont(ofSize: 12); message.textColor = .secondaryLabelColor
-        let reset = NSButton(title: "Restore Default",target: self,action: #selector(restoreDefault))
-        let cancel = NSButton(title: "Cancel",target: self,action: #selector(cancel))
-        let save = NSButton(title: "Save",target: self,action: #selector(save)); save.bezelStyle = .rounded
-        let actions = NSStackView(views: [reset,cancel,save]); actions.spacing = 12
-        let countLabel = NSTextField(labelWithString: "Recent captures to keep (1–500)")
-        limitField.setAccessibilityLabel("History limit")
+        recorder.controlSize = .large; recorder.font = .systemFont(ofSize: 15,weight: .medium)
+        let reset = NSButton(title: "Restore default",target: self,action: #selector(restoreDefault)); reset.bezelStyle = .rounded
+        let shortcutStack = NSStackView(views: [label,recorder,message,reset]); shortcutStack.orientation = .vertical; shortcutStack.alignment = .leading; shortcutStack.spacing = 14
+        let shortcutCard = ShotlightUI.card(shortcutStack)
+        let historyTitle = ShotlightUI.label("Recent captures",size: 15,weight: .semibold)
+        let historyNote = NSTextField(wrappingLabelWithString: "Keep editable screenshots so you can come back to them later."); historyNote.font = .systemFont(ofSize: 12); historyNote.textColor = .secondaryLabelColor
+        let countLabel = ShotlightUI.label("Captures to keep · 1–500")
+        limitField.setAccessibilityLabel("History limit"); limitField.alignment = .center; limitField.font = .systemFont(ofSize: 14)
         limitField.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        let retention = NSStackView(views: [countLabel,limitField]); retention.spacing = 12
-        let clear = NSButton(title: "Clear History…",target: self,action: #selector(clearRecentHistory))
-        let stack = NSStackView(views: [label,recorder,message,retention,clear,actions]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 14
-        stack.translatesAutoresizingMaskIntoConstraints = false; window.contentView!.addSubview(stack)
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor,constant: 24),stack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor,constant: -24),stack.topAnchor.constraint(equalTo: window.contentView!.topAnchor,constant: 22),recorder.widthAnchor.constraint(equalToConstant: 360)])
+        let retention = NSStackView(views: [countLabel,limitField]); retention.spacing = 24
+        let clear = NSButton(title: "Clear history…",target: self,action: #selector(clearRecentHistory)); clear.bezelStyle = .rounded; clear.contentTintColor = .systemRed
+        let historyStack = NSStackView(views: [historyTitle,historyNote,retention,clear]); historyStack.orientation = .vertical; historyStack.alignment = .leading; historyStack.spacing = 16
+        let historyCard = ShotlightUI.card(historyStack)
+        let cancel = NSButton(title: "Cancel",target: self,action: #selector(cancel)); cancel.bezelStyle = .rounded
+        let save = NSButton(title: "Save changes",target: self,action: #selector(save)); save.bezelStyle = .rounded; save.bezelColor = .systemIndigo; save.keyEquivalent = "\r"
+        let spacer = NSView(); let actions = NSStackView(views: [spacer,cancel,save]); actions.spacing = 10
+        let stack = NSStackView(views: [title,subtitle,shortcutCard,historyCard,actions]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16
+        stack.setCustomSpacing(5,after: title); stack.setCustomSpacing(24,after: subtitle)
+        let document = CaptureHistoryList(); let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.drawsBackground = false; scroll.documentView = document
+        window.setContentSize(NSSize(width: 520,height: min(650,(NSScreen.main?.visibleFrame.height ?? 800)-80)))
+        scroll.frame = window.contentView!.bounds; scroll.autoresizingMask = [.width,.height]; window.contentView!.addSubview(scroll)
+        stack.translatesAutoresizingMaskIntoConstraints = false; document.addSubview(stack)
+        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: document.leadingAnchor,constant: 26),stack.topAnchor.constraint(equalTo: document.topAnchor,constant: 26),stack.widthAnchor.constraint(equalToConstant: 468),shortcutCard.widthAnchor.constraint(equalTo: stack.widthAnchor),historyCard.widthAnchor.constraint(equalTo: stack.widthAnchor),actions.widthAnchor.constraint(equalTo: stack.widthAnchor),recorder.widthAnchor.constraint(equalTo: shortcutStack.widthAnchor),message.widthAnchor.constraint(equalTo: shortcutStack.widthAnchor),historyNote.widthAnchor.constraint(equalTo: historyStack.widthAnchor)])
+        document.layoutSubtreeIfNeeded(); document.frame = NSRect(x: 0,y: 0,width: 520,height: stack.fittingSize.height+52)
+        scroll.contentView.scroll(to: .zero); window.center()
+
     }
     required init?(coder: NSCoder) { fatalError() }
     @objc func restoreDefault() { recorder.recording = false; draft = .standard; recorder.title = draft.label }
@@ -465,8 +480,11 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     var lastArchiveError: String?
     var navigate: ((Int) -> Void)?
     let scroll = NSScrollView()
-    var previousButton: NSButton!
-    var nextButton: NSButton!
+    var previousButton: NSMenuItem!
+    var nextButton: NSMenuItem!
+    var compactTools: [NSButton] = []
+    let moreMenu = NSMenu()
+    let widthMenu = NSMenu()
     let captureLabel = NSTextField(labelWithString: "")
     var onClose: (() -> Void)?
     var undoButton: NSButton!
@@ -474,30 +492,57 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     init(image: NSImage,captureID: UUID? = nil,store: CaptureStore? = nil) {
         canvas = Canvas(image: image); self.captureID = captureID; archive = store
         let screen = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1200, height: 800)
-        let size = NSSize(width: min(max(image.size.width,980),screen.width-80), height: min(max(image.size.height+65,300),screen.height-80))
+        let size = NSSize(width: min(max(image.size.width+56,760),screen.width-80), height: min(max(image.size.height+120,360),screen.height-80))
         let window = ScreenshotWindow(contentRect: NSRect(origin: .zero,size: size), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
         super.init(window: window)
         window.copyScreenshot = { [weak self] in self?.copyImage() }
         window.title = "Shotlight — Annotate Screenshot"; window.delegate = self; window.center(); window.isReleasedWhenClosed = false
-        let root = NSView(); window.contentView = root
-        let tools = NSSegmentedControl(labels: ["Pen","Arrow","Rectangle","Text"], trackingMode: .selectOne, target: self, action: #selector(selectTool(_:))); tools.selectedSegment = 1
-        let color = NSColorWell(); color.color = .systemRed; color.target = self; color.action = #selector(selectColor(_:)); color.setFrameSize(NSSize(width: 42,height: 28))
-        let width = NSPopUpButton(); width.addItems(withTitles: ["Thin","Medium","Thick"]); width.selectItem(at: 1); width.target = self; width.action = #selector(selectWidth(_:))
-        undoButton = button("Undo", #selector(undo)); undoButton.keyEquivalent = "z"
-        redoButton = button("Redo", #selector(redo)); redoButton.keyEquivalent = "z"; redoButton.keyEquivalentModifierMask = [.command,.shift]
-        let copy = button("Copy & Close", #selector(copyImage))
-        let save = button("Save…", #selector(saveImage)); save.keyEquivalent = "s"
-        let captureButton = button("Capture", #selector(newCapture))
-        let settings = button("Settings…", #selector(openSettings))
-        let toolbar = NSStackView(views: [captureButton,tools,color,width,undoButton,redoButton,copy,save,settings]); toolbar.spacing = 8; toolbar.alignment = .centerY
-        scroll.hasHorizontalScroller = true; scroll.hasVerticalScroller = true; scroll.documentView = canvas; scroll.drawsBackground = true; scroll.backgroundColor = .darkGray
-        previousButton = button("Previous",#selector(previousCapture)); nextButton = button("Next",#selector(nextCapture))
-        let recent = button("Recent Captures…",#selector(recentCaptures))
-        captureLabel.font = .systemFont(ofSize: 12); captureLabel.textColor = .secondaryLabelColor
-        let navigation = NSStackView(views: [previousButton,nextButton,recent,captureLabel]); navigation.spacing = 10; navigation.alignment = .centerY
-        for view in [toolbar,navigation,scroll] { view.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(view) }
-        NSLayoutConstraint.activate([toolbar.topAnchor.constraint(equalTo: root.topAnchor,constant: 12),toolbar.leadingAnchor.constraint(equalTo: root.leadingAnchor,constant: 12),navigation.topAnchor.constraint(equalTo: toolbar.bottomAnchor,constant: 8),navigation.leadingAnchor.constraint(equalTo: root.leadingAnchor,constant: 12),scroll.topAnchor.constraint(equalTo: navigation.bottomAnchor,constant: 10),scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor)])
-        window.minSize = NSSize(width: 980,height: 250)
+        let root = BackgroundView(); window.contentView = root
+        let clip = CenteredClipView(); scroll.contentView = clip
+        scroll.hasHorizontalScroller = true; scroll.hasVerticalScroller = true; scroll.scrollerStyle = .overlay
+        scroll.documentView = canvas; scroll.drawsBackground = true; scroll.backgroundColor = .windowBackgroundColor
+        scroll.allowsMagnification = true; scroll.minMagnification = 0.25; scroll.maxMagnification = 2
+        scroll.automaticallyAdjustsContentInsets = false; scroll.contentInsets = NSEdgeInsets(top: 24,left: 24,bottom: 84,right: 24)
+        scroll.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(scroll)
+        NSLayoutConstraint.activate([scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),scroll.topAnchor.constraint(equalTo: root.topAnchor),scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor)])
+        let tools = NSStackView(); tools.spacing = 2
+        for (index,symbol) in ["pencil","arrow.up.right","rectangle","textformat"].enumerated() {
+            let button = ShotlightUI.icon(symbol,label: ["Pen","Arrow","Rectangle","Text — click to type or edit"][index],target: self,action: #selector(selectCompactTool(_:)))
+            button.tag = index; button.setButtonType(.pushOnPushOff); button.state = index == 1 ? .on : .off
+            compactTools.append(button); tools.addArrangedSubview(button)
+        }
+        let color = NSColorWell(); color.color = .systemRed; color.colorWellStyle = .minimal; color.isBordered = false
+        color.target = self; color.action = #selector(selectColor(_:)); color.toolTip = "Annotation color"; color.setAccessibilityLabel("Annotation color")
+        color.translatesAutoresizingMaskIntoConstraints = false; NSLayoutConstraint.activate([color.widthAnchor.constraint(equalToConstant: 32),color.heightAnchor.constraint(equalToConstant: 32)])
+        let width = ShotlightUI.icon("lineweight",label: "Stroke & text size",target: self,action: #selector(showWidthMenu(_:)))
+        widthMenu.autoenablesItems = false
+        for (index,label) in ["Thin","Medium","Thick"].enumerated() {
+            let item = NSMenuItem(title: label,action: #selector(selectCompactWidth(_:)),keyEquivalent: ""); item.target = self; item.tag = index; item.state = index == 1 ? .on : .off; widthMenu.addItem(item)
+        }
+        undoButton = ShotlightUI.icon("arrow.uturn.backward",label: "Undo (⌘Z)",target: self,action: #selector(undo)); undoButton.keyEquivalent = "z"
+        redoButton = ShotlightUI.icon("arrow.uturn.forward",label: "Redo (⇧⌘Z)",target: self,action: #selector(redo)); redoButton.keyEquivalent = "z"; redoButton.keyEquivalentModifierMask = [.command,.shift]
+        let copy = ShotlightUI.icon("doc.on.doc",label: "Copy & close (⌘C)",target: self,action: #selector(copyImage)); copy.primary = true
+        let save = ShotlightUI.icon("square.and.arrow.down",label: "Save PNG (⌘S)",target: self,action: #selector(saveImage)); save.keyEquivalent = "s"
+        let capture = ShotlightUI.icon("viewfinder",label: "New capture",target: self,action: #selector(newCapture))
+        let more = ShotlightUI.icon("ellipsis",label: "More — history, zoom & settings",target: self,action: #selector(showMoreMenu(_:)))
+        moreMenu.autoenablesItems = false
+        let info = NSMenuItem(title: "Screenshot",action: nil,keyEquivalent: ""); info.isEnabled = false; moreMenu.addItem(info)
+        for (title,symbol,action) in [("Recent captures…","clock.arrow.circlepath",#selector(recentCaptures)),("Previous capture","chevron.left",#selector(previousCapture)),("Next capture","chevron.right",#selector(nextCapture))] {
+            let item = NSMenuItem(title: title,action: action,keyEquivalent: ""); item.target = self; item.image = NSImage(systemSymbolName: symbol,accessibilityDescription: title); moreMenu.addItem(item)
+            if action == #selector(previousCapture) { previousButton = item }; if action == #selector(nextCapture) { nextButton = item }
+        }
+        moreMenu.addItem(.separator())
+        let zoom = NSMenuItem(title: "Zoom",action: nil,keyEquivalent: ""); let zoomMenu = NSMenu(); zoom.submenu = zoomMenu
+        for percent in [25,50,75,100,150,200] { let item = NSMenuItem(title: "\(percent)%",action: #selector(selectZoom(_:)),keyEquivalent: ""); item.tag = percent; item.target = self; item.state = percent == 100 ? .on : .off; zoomMenu.addItem(item) }
+        moreMenu.addItem(zoom)
+        let settings = NSMenuItem(title: "Settings…",action: #selector(openSettings),keyEquivalent: ""); settings.target = self; moreMenu.addItem(settings)
+        let toolbar = NSStackView(views: [capture,ShotlightUI.divider(),tools,ShotlightUI.divider(),color,width,ShotlightUI.divider(),undoButton,redoButton,ShotlightUI.divider(),copy,save,more]); toolbar.spacing = 5; toolbar.alignment = .centerY
+        let surface = ShotlightUI.card(toolbar,padding: 7); surface.wantsLayer = true; surface.layer?.shadowOpacity = 0.14; surface.layer?.shadowRadius = 14; surface.layer?.shadowOffset = CGSize(width: 0,height: -3)
+        surface.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(surface)
+        NSLayoutConstraint.activate([surface.centerXAnchor.constraint(equalTo: root.centerXAnchor),surface.bottomAnchor.constraint(equalTo: root.bottomAnchor,constant: -12)])
+        captureLabel.font = .systemFont(ofSize: 12); captureLabel.textColor = .secondaryLabelColor; captureLabel.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(captureLabel)
+        NSLayoutConstraint.activate([captureLabel.centerXAnchor.constraint(equalTo: root.centerXAnchor),captureLabel.topAnchor.constraint(equalTo: root.topAnchor,constant: 12)])
+        window.minSize = NSSize(width: 680,height: 300)
         connectCanvas(); updateUndo(); updateNavigation()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -511,7 +556,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         let task = DispatchWorkItem { [weak self] in
             guard let self,let id = self.captureID,let archive = self.archive,archive.contains(id) else { return }
             do { try archive.save(id,marks: self.canvas.draftMarks(),undoHistory: self.canvas.draftUndoHistory(),redoHistory: self.canvas.draftRedoHistory()); self.lastArchiveError = nil; self.updateNavigation() }
-            catch { self.lastArchiveError = error.localizedDescription; self.captureLabel.stringValue = "Draft not retained — save or copy" }
+            catch { self.lastArchiveError = error.localizedDescription; self.captureLabel.stringValue = "Draft not retained — save or copy"; self.captureLabel.isHidden = false }
         }
         pendingSave = task; DispatchQueue.main.asyncAfter(deadline: .now()+0.25,execute: task)
     }
@@ -527,10 +572,10 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     func detachArchive() { pendingSave?.cancel(); pendingSave = nil; archive = nil; captureID = nil; updateNavigation() }
     func updateNavigation() {
         guard let archive,let id = captureID,let index = archive.records.firstIndex(where: { $0.id == id }) else {
-            previousButton?.isEnabled = false; nextButton?.isEnabled = false; captureLabel.stringValue = "Outside recent history — save or copy"; return
+            previousButton?.isEnabled = false; nextButton?.isEnabled = false; captureLabel.stringValue = "Outside recent history — save or copy"; captureLabel.isHidden = false; return
         }
         previousButton?.isEnabled = index+1 < archive.records.count; nextButton?.isEnabled = index > 0
-        captureLabel.stringValue = "\(archive.records[index].displayDate) · retained"
+        captureLabel.stringValue = "\(archive.records[index].displayDate) · retained"; captureLabel.isHidden = true
     }
     func loadCapture(_ id: UUID,store: CaptureStore) throws {
         let image = try store.image(id),marks = try store.marks(id),history = try store.undoHistory(id),undone = try store.redoHistory(id)
@@ -545,9 +590,25 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     @objc func nextCapture() { navigate?(-1) }
     @objc func recentCaptures() { (NSApp.delegate as? AppDelegate)?.showHistory() }
     func updateUndo() { undoButton.isEnabled = !canvas.history.isEmpty || canvas.textEditor != nil; redoButton.isEnabled = !canvas.undone.isEmpty; window?.isDocumentEdited = !canvas.marks.isEmpty }
-    @objc func selectTool(_ sender: NSSegmentedControl) { canvas.finishTextEditing(); canvas.tool = Tool(rawValue: sender.selectedSegment) ?? .arrow }
+    @objc func selectCompactTool(_ sender: NSButton) {
+        canvas.finishTextEditing(); canvas.tool = Tool(rawValue: sender.tag) ?? .arrow
+        for button in compactTools { button.state = button === sender ? .on : .off }
+    }
     @objc func selectColor(_ sender: NSColorWell) { canvas.color = sender.color }
-    @objc func selectWidth(_ sender: NSPopUpButton) { canvas.strokeWidth = [CGFloat(2),4,8][sender.indexOfSelectedItem] }
+    @objc func showWidthMenu(_ sender: NSButton) { widthMenu.popUp(positioning: nil,at: NSPoint(x: 0,y: sender.bounds.maxY+6),in: sender) }
+    @objc func selectCompactWidth(_ sender: NSMenuItem) {
+        canvas.strokeWidth = [CGFloat(2),4,8][sender.tag]
+        for item in widthMenu.items { item.state = item === sender ? .on : .off }
+    }
+    @objc func showMoreMenu(_ sender: NSButton) {
+        let rep = canvas.image.representations.first
+        moreMenu.items.first?.title = "\(rep?.pixelsWide ?? Int(canvas.image.size.width)) × \(rep?.pixelsHigh ?? Int(canvas.image.size.height)) px"
+        updateNavigation(); moreMenu.popUp(positioning: nil,at: NSPoint(x: 0,y: sender.bounds.maxY+6),in: sender)
+    }
+    @objc func selectZoom(_ sender: NSMenuItem) {
+        scroll.setMagnification(CGFloat(sender.tag)/100,centeredAt: NSPoint(x: canvas.bounds.midX,y: canvas.bounds.midY))
+        for item in sender.menu?.items ?? [] { item.state = item === sender ? .on : .off }
+    }
     @objc func openSettings() { (NSApp.delegate as? AppDelegate)?.showSettings() }
     @objc func newCapture() { (NSApp.delegate as? AppDelegate)?.capture() }
     @objc func undo() { canvas.undoMark() }
@@ -650,9 +711,13 @@ func keyboardCheck() -> String {
 
 let app = NSApplication.shared
 if CommandLine.arguments.contains("--run-checks") {
-    let result = exportCheck() + " " + keyboardCheck() + " " + historyCheck() + " " + frozenCaptureCheck()
+    let result = exportCheck() + " " + keyboardCheck() + " " + historyCheck() + " " + frozenCaptureCheck() + " " + compactToolbarCheck()
     print(result)
     exit(result.contains("FAIL:") ? 1 : 0)
+}
+if let flag = CommandLine.arguments.firstIndex(of: "--render-previews"), CommandLine.arguments.indices.contains(flag+1) {
+    do { try renderInterfacePreviews(to: URL(fileURLWithPath: CommandLine.arguments[flag+1],isDirectory: true)); exit(0) }
+    catch { print("Preview error: \(error)"); exit(1) }
 }
 let delegate = AppDelegate()
 app.delegate = delegate

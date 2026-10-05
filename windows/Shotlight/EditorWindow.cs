@@ -14,8 +14,9 @@ internal sealed class EditorWindow : Wpf.Window
     public Guid CaptureId { get; private set; }
     public AnnotationCanvas Canvas { get; private set; }
     private readonly Controls.ScrollViewer scroll = new() { HorizontalScrollBarVisibility = Controls.ScrollBarVisibility.Auto, VerticalScrollBarVisibility = Controls.ScrollBarVisibility.Auto, Background = Ui.Brush("#E9ECF2"), HorizontalContentAlignment = Wpf.HorizontalAlignment.Center, VerticalContentAlignment = Wpf.VerticalAlignment.Center };
-    private readonly Controls.Button previous, next, undo, redo;
-    private readonly Controls.Border canvasFrame = new() { Margin = new Wpf.Thickness(32), Background = Media.Brushes.White, Effect = new Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 3, Opacity = .14 } };
+    private readonly Controls.Button undo, redo;
+    private readonly Controls.MenuItem previous, next;
+    private readonly Controls.Border canvasFrame = new() { Margin = new Wpf.Thickness(28,28,28,92), Background = Media.Brushes.White, Effect = new Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 3, Opacity = .14 } };
     private readonly System.Windows.Shapes.Ellipse colorChip = new() { Width = 16, Height = 16, Stroke = Ui.Line, StrokeThickness = 1 };
     private readonly Controls.TextBlock dimensions = Ui.Label("",12,Ui.Muted);
     private readonly Controls.TextBlock status = new() { VerticalAlignment = Wpf.VerticalAlignment.Center, Foreground = Ui.Muted, Margin = new Wpf.Thickness(6,0,0,0) };
@@ -29,63 +30,66 @@ internal sealed class EditorWindow : Wpf.Window
         var draft = unretainedDraft ?? store.Get(id); Canvas = new(AnnotationCanvas.Read(unretainedPng ?? store.Original(id)),new AnnotationDocument(draft));
         Title = "Shotlight — Annotate Screenshot"; Width = 1200; Height = 820; MinWidth = 760; MinHeight = 460;
         Ui.Apply(this);
-        var root = new Controls.DockPanel(); Content = root;
-        var header = new Controls.Grid { Margin = new Wpf.Thickness(22,18,18,18) };
-        header.ColumnDefinitions.Add(new Controls.ColumnDefinition()); header.ColumnDefinitions.Add(new Controls.ColumnDefinition { Width = Wpf.GridLength.Auto });
-        var branding = new Controls.StackPanel { Orientation = Controls.Orientation.Horizontal };
-        var logo = new Controls.Border { Width = 40, Height = 40, Background = Ui.Accent, CornerRadius = new Wpf.CornerRadius(12), Margin = new Wpf.Thickness(0,0,12,0) };
-        var camera = Ui.Icon("Capture",22); camera.Stroke = Media.Brushes.White; logo.Child = camera; branding.Children.Add(logo);
-        var name = new Controls.StackPanel(); name.Children.Add(Ui.Label("Shotlight",21,bold:true)); name.Children.Add(Ui.Label("Capture, annotate, keep.",12,Ui.Muted)); branding.Children.Add(name); header.Children.Add(branding);
-        var actions = new Controls.StackPanel { Orientation = Controls.Orientation.Horizontal, VerticalAlignment = Wpf.VerticalAlignment.Center };
-        actions.Children.Add(Ui.Button("New capture",owner.QueueCapture,"Capture",hint:"Capture a new area"));
-        actions.Children.Add(Ui.Button("Save",Save,"Save",hint:"Save PNG · Ctrl+S"));
-        actions.Children.Add(Ui.Button("Copy & Close",() => CopyAndClose(),"Copy","PrimaryButton","Copy screenshot and close · Ctrl+C"));
-        actions.Children.Add(Ui.Button("",owner.ShowSettings,"Settings","QuietButton","Settings"));
-        Controls.Grid.SetColumn(actions,1); header.Children.Add(actions); Controls.DockPanel.SetDock(header,Controls.Dock.Top); root.Children.Add(header);
+        var root = new Controls.Grid(); Content = root;
+        root.Children.Add(scroll); canvasFrame.Child = Canvas; scroll.Content = canvasFrame; Canvas.Changed += OnChanged;
+        var warning = Ui.Card(status,new Wpf.Thickness(12,7,12,7));
+        warning.HorizontalAlignment = Wpf.HorizontalAlignment.Center; warning.VerticalAlignment = Wpf.VerticalAlignment.Top; warning.Margin = new Wpf.Thickness(12);
+        warning.SetBinding(Wpf.UIElement.VisibilityProperty,new System.Windows.Data.Binding("Visibility") { Source = status }); root.Children.Add(warning);
 
-        var toolbar = new Controls.WrapPanel { Margin = new Wpf.Thickness(18,10,12,10), VerticalAlignment = Wpf.VerticalAlignment.Center };
-        var toolbarSurface = new Controls.Border { Child = toolbar, Background = Media.Brushes.White, BorderBrush = Ui.Line, BorderThickness = new Wpf.Thickness(0,1,0,1) };
-        Controls.DockPanel.SetDock(toolbarSurface,Controls.Dock.Top); root.Children.Add(toolbarSurface);
+        var toolbar = new Controls.StackPanel { Orientation = Controls.Orientation.Horizontal };
+        var toolbarSurface = Ui.Card(toolbar,new Wpf.Thickness(7));
+        toolbarSurface.HorizontalAlignment = Wpf.HorizontalAlignment.Center; toolbarSurface.VerticalAlignment = Wpf.VerticalAlignment.Bottom;
+        toolbarSurface.Margin = new Wpf.Thickness(12); toolbarSurface.Effect = new Media.Effects.DropShadowEffect { BlurRadius = 22, ShadowDepth = 4, Opacity = .16 };
+        root.Children.Add(toolbarSurface);
+        toolbar.Children.Add(Ui.Button("",owner.QueueCapture,"Capture","QuietButton","New capture"));
+        toolbar.Children.Add(Ui.Divider());
         var toolButtons = new Dictionary<Tool,Controls.Primitives.ToggleButton>();
         foreach (var tool in Enum.GetValues<Tool>())
         {
-            var button = new Controls.Primitives.ToggleButton { Content = Ui.ButtonContent(tool.ToString(),tool.ToString()), IsChecked = tool == Tool.Arrow, Margin = new Wpf.Thickness(0,0,4,0), ToolTip = tool == Tool.Text ? "Click the screenshot to type. Click existing text to edit it." : tool.ToString() };
+            var button = new Controls.Primitives.ToggleButton { Content = Ui.ButtonContent("",tool.ToString()), IsChecked = tool == Tool.Arrow,
+                Width = 36, Height = 36, MinHeight = 36, Padding = new Wpf.Thickness(8), Margin = new Wpf.Thickness(0,0,2,0), ToolTip = tool == Tool.Text ? "Text · Click to type or edit an annotation" : tool.ToString() };
             Wpf.Automation.AutomationProperties.SetName(button,tool.ToString());
             button.Click += (_,_) => { Canvas.FinishText(); Canvas.Tool = tool; foreach (var pair in toolButtons) pair.Value.IsChecked = pair.Key == tool; };
             toolButtons.Add(tool,button); toolbar.Children.Add(button);
         }
         toolbar.Children.Add(Ui.Divider());
+        var colorMenu = Ui.Menu();
         foreach (var (argb,label) in new[] { (0xFFFF3B30u,"Red"),(0xFF5265E9u,"Indigo"),(0xFF16A085u,"Green"),(0xFFFFB020u,"Amber"),(0xFF202637u,"Ink"),(0xFFFFFFFFu,"White") })
         {
-            var swatch = Ui.Button("",() => { Canvas.Argb = argb; RefreshColor(); },hint:label + " annotation color");
-            swatch.Padding = new Wpf.Thickness(7); swatch.Margin = new Wpf.Thickness(0,0,3,0); swatch.BorderThickness = new Wpf.Thickness(0);
-            swatch.Content = new System.Windows.Shapes.Ellipse { Width = 16, Height = 16, Fill = Ui.Brush($"#{argb:X8}"), Stroke = Ui.Line, StrokeThickness = 1 };
-            toolbar.Children.Add(swatch);
+            var item = Ui.MenuItem(label,() => { Canvas.Argb = argb; RefreshColor(); });
+            item.Icon = new System.Windows.Shapes.Ellipse { Width = 14, Height = 14, Fill = Ui.Brush($"#{argb:X8}"), Stroke = Ui.Line, StrokeThickness = 1 }; colorMenu.Items.Add(item);
         }
-        var color = Ui.Button("",ChooseColor,hint:"Choose a custom annotation color"); color.Content = colorChip; color.Padding = new Wpf.Thickness(10); toolbar.Children.Add(color); RefreshColor();
-        var widths = new Controls.ComboBox { Width = 104, Margin = new Wpf.Thickness(6,0,4,0), ToolTip = "Stroke and text size" };
-        Wpf.Automation.AutomationProperties.SetName(widths,"Stroke and text size");
-        foreach (var text in new[] { "Thin","Medium","Thick" }) widths.Items.Add(text);
-        widths.SelectedIndex = 1; widths.SelectionChanged += (_,_) => Canvas.StrokeWidth = new float[] { 2,4,8 }[widths.SelectedIndex]; toolbar.Children.Add(widths);
-        toolbar.Children.Add(Ui.Divider());
+        colorMenu.Items.Add(new Controls.Separator()); colorMenu.Items.Add(Ui.MenuItem("Custom color…",ChooseColor));
+        var color = Ui.Button("",() => { },style:"QuietButton",hint:"Annotation color"); color.Content = colorChip; Ui.AttachMenu(color,colorMenu); toolbar.Children.Add(color); RefreshColor();
+        var weights = Ui.Menu(); var weightItems = new List<Controls.MenuItem>();
+        var weightButton = Ui.Button("",() => { },"Weight","QuietButton","Stroke & text size · Medium");
+        foreach (var (label,width) in new[] { ("Thin",2f),("Medium",4f),("Thick",8f) })
+        {
+            var item = Ui.MenuItem(label,() => { }); item.IsCheckable = true; item.IsChecked = width == 4;
+            item.Click += (_,_) => { Canvas.StrokeWidth = width; foreach (var other in weightItems) other.IsChecked = other == item; weightButton.ToolTip = "Stroke & text size · " + label; };
+            weightItems.Add(item); weights.Items.Add(item);
+        }
+        Ui.AttachMenu(weightButton,weights); toolbar.Children.Add(weightButton); toolbar.Children.Add(Ui.Divider());
         undo = Ui.Button("",() => Canvas.Undo(),"Undo","QuietButton","Undo · Ctrl+Z"); redo = Ui.Button("",() => Canvas.Redo(),"Redo","QuietButton","Redo · Ctrl+Y"); toolbar.Children.Add(undo); toolbar.Children.Add(redo);
-        foreach (Wpf.FrameworkElement item in toolbar.Children) { var margin = item.Margin; item.Margin = new Wpf.Thickness(margin.Left,margin.Top,margin.Right,4); }
-
-        var footer = new Controls.DockPanel { Margin = new Wpf.Thickness(16,10,16,10) };
-        var footerSurface = new Controls.Border { Child = footer, Background = Media.Brushes.White, BorderBrush = Ui.Line, BorderThickness = new Wpf.Thickness(0,1,0,0) };
-        Controls.DockPanel.SetDock(footerSurface,Controls.Dock.Bottom); root.Children.Add(footerSurface);
-        var zoomControls = new Controls.StackPanel { Orientation = Controls.Orientation.Horizontal };
-        zoomControls.Children.Add(dimensions); dimensions.Margin = new Wpf.Thickness(0,0,16,0);
-        var zoomBox = new Controls.ComboBox { Width = 90, ToolTip = "Preview zoom. Exports keep full resolution." };
-        Wpf.Automation.AutomationProperties.SetName(zoomBox,"Preview zoom");
-        foreach (var label in new[] { "25%","50%","75%","100%","150%","200%" }) zoomBox.Items.Add(label);
-        zoomBox.SelectedIndex = 3;
-        zoomBox.SelectionChanged += (_,_) => { zoom = new double[] { .25,.5,.75,1,1.5,2 }[zoomBox.SelectedIndex]; Canvas.LayoutTransform = new Media.ScaleTransform(zoom,zoom); };
-        zoomControls.Children.Add(zoomBox); Controls.DockPanel.SetDock(zoomControls,Controls.Dock.Right); footer.Children.Add(zoomControls);
-        var navigation = new Controls.StackPanel { Orientation = Controls.Orientation.Horizontal };
-        previous = Ui.Button("",() => owner.Navigate(this,1),"Previous","QuietButton","Previous capture"); next = Ui.Button("",() => owner.Navigate(this,-1),"Next","QuietButton","Next capture");
-        navigation.Children.Add(previous); navigation.Children.Add(next); navigation.Children.Add(Ui.Button("Recent captures",owner.ShowHistory,"History","QuietButton")); navigation.Children.Add(status); footer.Children.Add(navigation);
-        root.Children.Add(scroll); canvasFrame.Child = Canvas; scroll.Content = canvasFrame; Canvas.Changed += OnChanged;
+        toolbar.Children.Add(Ui.Divider());
+        toolbar.Children.Add(Ui.Button("",() => CopyAndClose(),"Copy","PrimaryButton","Copy & close · Ctrl+C"));
+        toolbar.Children.Add(Ui.Button("",Save,"Save","QuietButton","Save PNG · Ctrl+S"));
+        var more = Ui.Menu();
+        var info = new Controls.MenuItem { IsEnabled = false };
+        info.SetBinding(Controls.HeaderedItemsControl.HeaderProperty,new System.Windows.Data.Binding("Text") { Source = dimensions }); more.Items.Add(info);
+        more.Items.Add(Ui.MenuItem("Recent captures…",owner.ShowHistory,"History"));
+        previous = Ui.MenuItem("Previous capture",() => owner.Navigate(this,1),"Previous"); next = Ui.MenuItem("Next capture",() => owner.Navigate(this,-1),"Next");
+        more.Items.Add(previous); more.Items.Add(next); more.Items.Add(new Controls.Separator());
+        var zoomMenu = new Controls.MenuItem { Header = "Zoom", Icon = Ui.Icon("Zoom") }; var zoomItems = new List<Controls.MenuItem>();
+        foreach (double scale in new[] { .25,.5,.75,1,1.5,2 })
+        {
+            var item = Ui.MenuItem($"{scale*100:0}%",() => { }); item.IsCheckable = true; item.IsChecked = scale == 1;
+            item.Click += (_,_) => { zoom = scale; Canvas.LayoutTransform = new Media.ScaleTransform(zoom,zoom); foreach (var other in zoomItems) other.IsChecked = other == item; UpdateNavigation(); };
+            zoomItems.Add(item); zoomMenu.Items.Add(item);
+        }
+        more.Items.Add(zoomMenu); more.Items.Add(Ui.MenuItem("Settings…",owner.ShowSettings,"Settings"));
+        var moreButton = Ui.Button("",() => { },"More","QuietButton","More · History, zoom & settings"); Ui.AttachMenu(moreButton,more); toolbar.Children.Add(moreButton);
+        foreach (var item in toolbar.Children.OfType<Controls.Button>()) { item.Width = 36; item.Height = 36; item.MinHeight = 36; item.Padding = new Wpf.Thickness(8); item.Margin = new Wpf.Thickness(0,0,2,0); }
         autosave.Tick += (_,_) => { autosave.Stop(); SaveDraft(showError: false); };
         Closing += OnClosing; Closed += (_,_) => { autosave.Stop(); Canvas.Changed -= OnChanged; owner.EditorClosed(this); };
         PreviewKeyDown += OnKey;
@@ -133,7 +137,7 @@ internal sealed class EditorWindow : Wpf.Window
         try { store.Save(CaptureId,Canvas.DraftSnapshot()); UpdateNavigation(); return true; }
         catch (Exception error)
         {
-            status.Text = "Draft not retained — save or copy";
+            status.Text = "Draft not retained — save or copy"; status.Visibility = Wpf.Visibility.Visible;
             if (showError) Ui.Error("Could not retain this screenshot",error); return false;
         }
     }
@@ -142,8 +146,9 @@ internal sealed class EditorWindow : Wpf.Window
         int index = store.Records.FindIndex(r => r.Id == CaptureId);
         previous.IsEnabled = index >= 0 && index+1 < store.Records.Count; next.IsEnabled = index > 0;
         status.Text = index >= 0 ? $"{index+1} of {store.Records.Count} · Saved to history" : "Outside history — save or copy";
+        status.Visibility = index >= 0 ? Wpf.Visibility.Collapsed : Wpf.Visibility.Visible;
         status.ToolTip = index >= 0 ? store.Records[index].CapturedAt.LocalDateTime.ToString("f") : status.Text;
-        dimensions.Text = $"{Canvas.Original.PixelWidth} × {Canvas.Original.PixelHeight} px";
+        dimensions.Text = $"{Canvas.Original.PixelWidth} × {Canvas.Original.PixelHeight} px · {zoom*100:0}%";
         undo.IsEnabled = Canvas.IsEditing || Canvas.Document.UndoStack.Count > 0; redo.IsEnabled = Canvas.Document.RedoStack.Count > 0;
     }
     public void LoadCapture(Guid id)

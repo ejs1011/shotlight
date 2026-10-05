@@ -140,9 +140,27 @@ final class CaptureStore {
     }
 }
 
-final class CaptureHistoryButton: NSButton { var captureID: UUID? }
+final class CaptureHistoryButton: NSButton {
+    override var isFlipped: Bool { false }
+    var captureID: UUID?
+    var detail = ""
+    override func draw(_ dirtyRect: NSRect) {
+        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 12,yRadius: 12)
+        (cell?.isHighlighted == true ? NSColor.systemIndigo.withAlphaComponent(0.1) : .controlBackgroundColor).setFill(); card.fill()
+        NSColor.separatorColor.withAlphaComponent(0.4).setStroke(); card.lineWidth = 1; card.stroke()
+        let preview = NSRect(x: 12,y: 68,width: bounds.width-24,height: bounds.height-80)
+        NSColor.windowBackgroundColor.setFill(); NSBezierPath(roundedRect: preview,xRadius: 7,yRadius: 7).fill()
+        if let image {
+            let factor = min((preview.width-12)/image.size.width,(preview.height-12)/image.size.height)
+            let size = NSSize(width: image.size.width*factor,height: image.size.height*factor)
+            image.draw(in: NSRect(x: preview.midX-size.width/2,y: preview.midY-size.height/2,width: size.width,height: size.height))
+        }
+        (title as NSString).draw(in: NSRect(x: 14,y: 37,width: bounds.width-28,height: 20),withAttributes: [.font: NSFont.systemFont(ofSize: 13,weight: .semibold),.foregroundColor: NSColor.labelColor])
+        (detail as NSString).draw(in: NSRect(x: 14,y: 15,width: bounds.width-28,height: 18),withAttributes: [.font: NSFont.systemFont(ofSize: 11),.foregroundColor: NSColor.secondaryLabelColor])
+    }
+}
 final class CaptureHistoryList: NSView { override var isFlipped: Bool { true } }
-final class CaptureHistoryController: NSWindowController {
+final class CaptureHistoryController: NSWindowController, NSWindowDelegate {
     let store: CaptureStore
     let open: (UUID) -> Void
     let scroll = NSScrollView()
@@ -150,31 +168,36 @@ final class CaptureHistoryController: NSWindowController {
     let summary = NSTextField(labelWithString: "")
     init(store: CaptureStore, open: @escaping (UUID) -> Void) {
         self.store = store; self.open = open
-        let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 660,height: 600),styleMask: [.titled,.closable,.resizable],backing: .buffered,defer: false)
-        super.init(window: window); window.title = "Shotlight — Recent Captures"; window.center(); window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 440,height: 280)
+        let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 840,height: 650),styleMask: [.titled,.closable,.resizable],backing: .buffered,defer: false)
+        super.init(window: window); window.contentView = BackgroundView(frame: window.contentView!.bounds); window.title = "Shotlight — Recent Captures"; window.center(); window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 580,height: 300); window.delegate = self
         scroll.hasVerticalScroller = true; scroll.drawsBackground = false; scroll.documentView = list
         list.autoresizingMask = [.width]
         summary.textColor = .secondaryLabelColor; summary.font = .systemFont(ofSize: 12)
-        for view in [summary,scroll] { view.translatesAutoresizingMaskIntoConstraints = false; window.contentView!.addSubview(view) }
-        NSLayoutConstraint.activate([summary.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor,constant: 16),summary.topAnchor.constraint(equalTo: window.contentView!.topAnchor,constant: 14),scroll.topAnchor.constraint(equalTo: summary.bottomAnchor,constant: 12),scroll.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),scroll.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),scroll.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor)])
-        reload()
+        let heading = ShotlightUI.label("Recent captures",size: 26,weight: .semibold)
+        for view in [heading,summary,scroll] { view.translatesAutoresizingMaskIntoConstraints = false; window.contentView!.addSubview(view) }
+        NSLayoutConstraint.activate([heading.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor,constant: 26),heading.topAnchor.constraint(equalTo: window.contentView!.topAnchor,constant: 24),summary.leadingAnchor.constraint(equalTo: heading.leadingAnchor),summary.topAnchor.constraint(equalTo: heading.bottomAnchor,constant: 8),scroll.topAnchor.constraint(equalTo: summary.bottomAnchor,constant: 22),scroll.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),scroll.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),scroll.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor)])
+        window.contentView?.layoutSubtreeIfNeeded(); reload()
     }
+    func windowDidResize(_ notification: Notification) { reload() }
     required init?(coder: NSCoder) { fatalError() }
     func reload() {
         let origin = scroll.contentView.bounds.origin
         list.subviews.forEach { $0.removeFromSuperview() }
-        summary.stringValue = "\(store.records.count) of \(store.limit) recent captures · retained automatically"
-        let width = max(420,scroll.contentSize.width)
-        list.frame = NSRect(x: 0,y: 0,width: width,height: max(120,CGFloat(store.records.count)*96+24))
+        summary.stringValue = "\(store.records.count) captures · Automatically kept on this Mac · Limit \(store.limit)"
+        let width = max(540,scroll.contentSize.width)
+        let columns = max(1,Int((width-32)/252)), cardWidth = (width-32-CGFloat(columns-1)*12)/CGFloat(columns)
+        let rows = (store.records.count+columns-1)/columns
+        list.frame = NSRect(x: 0,y: 0,width: width,height: max(120,CGFloat(rows)*228+20))
         if store.records.isEmpty {
             let label = NSTextField(wrappingLabelWithString: "No captures yet. Your next screenshot will appear here automatically.")
             label.frame = NSRect(x: 24,y: 30,width: width-48,height: 60); label.autoresizingMask = [.width]; list.addSubview(label)
         }
         for (index,record) in store.records.enumerated() {
-            let row = CaptureHistoryButton(title: "  \(record.displayDate)\n  \(Int(record.imageWidth)) × \(Int(record.imageHeight))",target: self,action: #selector(openCapture(_:)))
+            let row = CaptureHistoryButton(title: record.displayDate,target: self,action: #selector(openCapture(_:)))
+            row.detail = "\(Int(record.imageWidth)) × \(Int(record.imageHeight)) · \(record.marks.count) annotations"; row.isBordered = false
             row.captureID = record.id; row.image = store.thumbnail(record.id); row.image?.size = NSSize(width: 120,height: 75)
             row.imagePosition = .imageLeft; row.imageScaling = .scaleProportionallyDown; row.alignment = .left; row.bezelStyle = .regularSquare; row.font = .systemFont(ofSize: 13)
-            row.frame = NSRect(x: 12,y: 12+CGFloat(index)*96,width: width-24,height: 84); row.autoresizingMask = [.width]
+            row.frame = NSRect(x: 16+CGFloat(index%columns)*(cardWidth+12),y: CGFloat(index/columns)*228,width: cardWidth,height: 214)
             row.setAccessibilityLabel("Capture \(record.displayDate)"); list.addSubview(row)
         }
         scroll.contentView.scroll(to: NSPoint(x: 0,y: min(origin.y,max(0,list.frame.height-scroll.contentSize.height))))

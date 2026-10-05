@@ -76,6 +76,38 @@ internal static class WindowsChecks
                 Require(copied && closed && !editor.Canvas.IsEditing,"Ctrl+C did not copy and dismiss.");
                 var restored = new CaptureStore(owner.TestStore.Root); Require(restored.Get(id).Marks.Single().Text == "Copy this draft","Copy-close discarded its history.");
             });
+            Check("compact toolbar menus change size and zoom while preserving pixels and history navigation",() =>
+            {
+                static IEnumerable<Wpf.DependencyObject> Descendants(Wpf.DependencyObject root)
+                {
+                    yield return root;
+                    foreach (var child in Wpf.LogicalTreeHelper.GetChildren(root).OfType<Wpf.DependencyObject>())
+                        foreach (var nested in Descendants(child)) yield return nested;
+                }
+                var editor = owner.OpenNew(source); Guid original = editor.CaptureId;
+                var buttons = Descendants(editor).OfType<Controls.Button>().ToArray();
+                var size = buttons.Single(button => button.ToolTip is string hint && hint.StartsWith("Stroke & text size"));
+                var thick = size.ContextMenu.Items.OfType<Controls.MenuItem>().Single(item => Equals(item.Header,"Thick"));
+                thick.RaiseEvent(new Wpf.RoutedEventArgs(Controls.MenuItem.ClickEvent));
+                Require(editor.Canvas.StrokeWidth == 8,"Compact size menu did not update the annotation size.");
+                var more = buttons.Single(button => button.ToolTip is string hint && hint.StartsWith("More ·")).ContextMenu;
+                more.PlacementTarget = editor; more.IsOpen = true; more.UpdateLayout();
+                editor.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                Require(more.ActualWidth > 100,"More menu did not open.");
+                var zoom = more.Items.OfType<Controls.MenuItem>().Single(item => Equals(item.Header,"Zoom"));
+                zoom.IsSubmenuOpen = true; zoom.ApplyTemplate();
+                editor.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                var popup = (Controls.Primitives.Popup)zoom.Template.FindName("PART_Popup",zoom);
+                Require(popup.IsOpen && ((Wpf.FrameworkElement)popup.Child).ActualWidth > 0,"Zoom submenu did not open.");
+                zoom.Items.OfType<Controls.MenuItem>().Single(item => Equals(item.Header,"150%")).RaiseEvent(new Wpf.RoutedEventArgs(Controls.MenuItem.ClickEvent));
+                Require(editor.Canvas.LayoutTransform is System.Windows.Media.ScaleTransform transform && transform.ScaleX == 1.5,"Zoom menu did not update the preview.");
+                using var output = ImageFiles.Read(editor.Canvas.ExportPng());
+                Require(output.Width == source.Width && output.Height == source.Height,"Preview zoom changed exported pixels.");
+                zoom.IsSubmenuOpen = false; more.IsOpen = false;
+                more.Items.OfType<Controls.MenuItem>().Single(item => Equals(item.Header,"Previous capture")).RaiseEvent(new Wpf.RoutedEventArgs(Controls.MenuItem.ClickEvent));
+                Require(editor.CaptureId != original && owner.TestStore.Contains(original),"History navigation lost the original capture."); editor.Close();
+            });
+
         }
         catch (Exception error) { failed++; report.AppendLine("FAIL: check setup\n" + error); }
         finally
