@@ -28,6 +28,11 @@ internal static class UiPreview
             editor.ApplyCopyPreference(false);
             var textTool = FindTools(editor).Single(button => Wpf.Automation.AutomationProperties.GetName(button) == "Text"); textTool.RaiseEvent(new Wpf.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             Render(editor,directory,"editor-copy-open",820,700);
+            editor.Canvas.BeginText(new(899,459));
+            var inline = editor.Canvas.Children.OfType<System.Windows.Controls.TextBox>().Single();
+            inline.Text = "Edge text\r\nSecond line\r\nThird line\r\n"; inline.CaretIndex = inline.Text.Length;
+            Render(editor,directory,"editor-inline-edge",820,700);
+            editor.Canvas.FinishText(cancel: true);
             editor.Close();
             for (int i = 0; i < 5; i++)
                 owner.TestStore.Add(ImageFiles.Png(sample),ImageFiles.Thumbnail(sample),sample.Width,sample.Height,DateTimeOffset.Now.AddHours(-i-1));

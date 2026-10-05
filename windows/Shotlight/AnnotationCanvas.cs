@@ -26,6 +26,7 @@ internal sealed class AnnotationCanvas : Controls.Canvas
     private Annotation? current;
     private Controls.TextBox? textBox;
     private TextDraft? editing;
+    private PixelPoint textAnchor;
     public event Action? Changed;
     public bool IsEditing => textBox is not null;
     public AnnotationCanvas(Imaging.BitmapSource original, AnnotationDocument document)
@@ -134,13 +135,15 @@ internal sealed class AnnotationCanvas : Controls.Canvas
         FinishText(); var mark = index is int i ? Document.Marks[i] : null;
         if (mark is not null) fontSizePoints = Math.Max(16, mark.Width*6)*.75f;
         editing = new(index,mark?.Points[0] ?? position,mark?.Argb ?? argb,mark?.Width ?? fontSizePoints/4.5f,mark?.Text ?? "");
+        textAnchor = editing.Position;
         var box = new Controls.TextBox
         {
             Text = editing.Text, AcceptsReturn = true, AcceptsTab = false, TextWrapping = Wpf.TextWrapping.NoWrap,
             Background = Media.Brushes.Transparent, BorderThickness = new Wpf.Thickness(0), Padding = new Wpf.Thickness(0),
+            UseLayoutRounding = false, // Preserve image coordinates at fractional display scales.
             FontFamily = new Media.FontFamily("Segoe UI Semibold"), VerticalContentAlignment = Wpf.VerticalAlignment.Top,
             HorizontalScrollBarVisibility = Controls.ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = Controls.ScrollBarVisibility.Hidden,
-            MinWidth = 40, MinHeight = Math.Max(16,editing.Width*6)*1.4
+            MinWidth = 40
         };
         Wpf.Automation.AutomationProperties.SetName(box,"Screenshot text annotation");
         Media.TextOptions.SetTextFormattingMode(box,Media.TextFormattingMode.Ideal);
@@ -155,12 +158,20 @@ internal sealed class AnnotationCanvas : Controls.Canvas
     private void RefreshText()
     {
         if (textBox is null || editing is null) return;
-        SetLeft(textBox,editing.Position.X); SetTop(textBox,editing.Position.Y);
         textBox.Foreground = Brush(editing.Argb); textBox.CaretBrush = Brush(editing.Argb);
         textBox.FontSize = Math.Max(16,editing.Width*6);
-        var measured = Text(editing.Mark);
-        textBox.Width = Math.Max(40,measured.WidthIncludingTrailingWhitespace+12);
-        textBox.Height = Math.Max(textBox.FontSize*1.4,measured.Height+4);
+        // FormattedText omits a trailing empty line. A measurement-only zero-width
+        // character gives that row its full height, keeping preceding rows visible
+        // when TextBox scrolls the caret into view after Shift+Enter.
+        var measured = Text(editing.Mark with { Text = editing.Text+"\u200B" });
+        textBox.Width = Math.Ceiling(Math.Max(40,measured.WidthIncludingTrailingWhitespace+12));
+        textBox.Height = Math.Ceiling(Math.Max(textBox.FontSize*1.4,measured.Height+4));
+        // Grow inward at the image edges. Archive the same position shown while
+        // typing so committing, reopening and exporting do not move the text.
+        editing = editing with { Position = new(
+            (float)Math.Clamp(textAnchor.X,0,Math.Max(0,Width-textBox.Width)),
+            (float)Math.Clamp(textAnchor.Y,0,Math.Max(0,Height-textBox.Height))) };
+        SetLeft(textBox,editing.Position.X); SetTop(textBox,editing.Position.Y);
         InvalidateVisual(); Changed?.Invoke();
     }
     public void FinishText(bool cancel = false)

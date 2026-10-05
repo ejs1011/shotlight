@@ -86,4 +86,6 @@ Both platforms use a compact floating toolbar. History, previous/next navigation
 
 Windows renders also include the keep-open Copy mode, a short settings window with an inline retention error, and the one-time welcome.
 
+Windows inline text grows inward at the screenshot's right and bottom edges, retaining that position in the draft and export. Its height includes trailing blank lines so Shift+Enter keeps preceding rows visible. Generated-image checks cover edge typing at several preview scales, font-size changes, multiline caret visibility, commit/reopen/cancel, and retained positions. The `editor-inline-edge` preview shows multiple rows being edited at the bottom-right corner.
+
 Mac interface renders are available with `./macos/artifacts/Shotlight.app/Contents/MacOS/Shotlight --render-previews OUTPUT_DIRECTORY`. This renders native views with generated images and temporary history, including the light and dark editor, a compact editor, the keep-open Copy mode, annotated history, light/dark settings, validation at a short window height, and the welcome screen.
