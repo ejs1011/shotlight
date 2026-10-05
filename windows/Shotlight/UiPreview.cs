@@ -33,7 +33,7 @@ internal static class UiPreview
                 owner.TestStore.Add(ImageFiles.Png(sample),ImageFiles.Thumbnail(sample),sample.Width,sample.Height,DateTimeOffset.Now.AddHours(-i-1));
             var history = new HistoryWindow(owner.TestStore,_ => { }); history.Show(); Render(history,directory,"recent-captures",840,680); history.Close();
             var settings = new SettingsWindow(new UserSettings(),_ => null,() => { },() => owner.TestStore.Records.Count); settings.Show(); Render(settings,directory,"settings",550,null);
-            settings.LimitField.Text = "2"; Render(settings,directory,"settings-retention",550,null);
+            settings.LimitField.Text = "2"; settings.BodyScroll.ScrollToEnd(); Render(settings,directory,"settings-retention",550,null);
             settings.Height = 480; settings.UpdateLayout(); settings.LimitField.Text = "0"; settings.SaveChanges(); Render(settings,directory,"settings-validation",550,480); settings.Close();
             var welcome = new WelcomeWindow(CaptureShortcut.Default,() => { }); welcome.Show(); Render(welcome,directory,"welcome",480,null); welcome.Close();
             return 0;
@@ -58,11 +58,13 @@ internal static class UiPreview
         window.UpdateLayout();
         window.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         var content = (Wpf.FrameworkElement)window.Content; content.UpdateLayout();
-        var image = new Imaging.RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth),(int)Math.Ceiling(content.ActualHeight),96,96,Media.PixelFormats.Pbgra32);
+        double contentWidth = content.ActualWidth+content.Margin.Left+content.Margin.Right;
+        double contentHeight = content.ActualHeight+content.Margin.Top+content.Margin.Bottom;
+        var image = new Imaging.RenderTargetBitmap((int)Math.Ceiling(contentWidth),(int)Math.Ceiling(contentHeight),96,96,Media.PixelFormats.Pbgra32);
         // Window.Background is outside the content visual. Composite it first
         // so exported previews match the opaque on-screen window.
         var background = new Media.DrawingVisual();
-        using (var drawing = background.RenderOpen()) drawing.DrawRectangle(window.Background,null,new Wpf.Rect(0,0,content.ActualWidth,content.ActualHeight));
+        using (var drawing = background.RenderOpen()) drawing.DrawRectangle(window.Background,null,new Wpf.Rect(0,0,contentWidth,contentHeight));
         image.Render(background); image.Render(content); var encoder = new Imaging.PngBitmapEncoder(); encoder.Frames.Add(Imaging.BitmapFrame.Create(image));
         using var file = File.Create(Path.Combine(directory,name+".png")); encoder.Save(file);
     }

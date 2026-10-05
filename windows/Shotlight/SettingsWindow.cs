@@ -22,12 +22,14 @@ internal sealed class SettingsWindow : Wpf.Window
     private readonly Controls.TextBox limit;
     private readonly Controls.CheckBox closeOnCopy = new() { Content = "Close editor after copying", Margin = new Wpf.Thickness(0,14,0,0) };
     private readonly Controls.StackPanel body = new() { Margin = new Wpf.Thickness(26,26,26,0) };
+    private readonly Controls.ScrollViewer scroller = new() { VerticalScrollBarVisibility = Controls.ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = Controls.ScrollBarVisibility.Disabled };
     internal Func<int,int,bool>? ConfirmReduction { get; set; }
     internal Controls.TextBox LimitField => limit;
     internal Controls.TextBlock HistoryError => historyError;
     internal Controls.TextBlock ShortcutError => shortcutError;
     internal Controls.CheckBox CloseOnCopy => closeOnCopy;
     internal Controls.TextBlock RetentionWarning => retentionWarning;
+    internal Controls.ScrollViewer BodyScroll => scroller;
 
     public SettingsWindow(UserSettings settings, Func<UserSettings,SettingsFailure?> apply, Action clear, Func<int>? captureCount = null)
     {
@@ -40,7 +42,7 @@ internal sealed class SettingsWindow : Wpf.Window
         var cancel = Ui.Button("Cancel",Close); cancel.IsCancel = true; actions.Children.Add(cancel);
         var save = Ui.Button("Save changes",SaveChanges,"Check","PrimaryButton"); save.IsDefault = true; actions.Children.Add(save); footer.Children.Add(actions);
         Controls.DockPanel.SetDock(footer,Controls.Dock.Bottom); root.Children.Add(footer);
-        root.Children.Add(new Controls.ScrollViewer { Content = body, VerticalScrollBarVisibility = Controls.ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = Controls.ScrollBarVisibility.Disabled });
+        scroller.Content = body; root.Children.Add(scroller);
         body.Children.Add(Ui.Label("Settings",26,bold:true));
         var shortcut = new Controls.StackPanel(); shortcut.Children.Add(Ui.Label("Capture shortcut",15,bold:true));
         recorder = Ui.Button(draft.Display,BeginRecording,"Capture"); recorder.Margin = new Wpf.Thickness(0,14,0,0); recorder.PreviewKeyDown += Record;
@@ -90,9 +92,18 @@ internal sealed class SettingsWindow : Wpf.Window
         label.Text = failure.Message; label.Visibility = Wpf.Visibility.Visible; UpdateLayout();
         if (failure.Field == SettingField.General) return;
         Wpf.FrameworkElement field = failure.Field == SettingField.Shortcut ? recorder : limit;
-        var fieldBounds = field.TransformToAncestor(body).TransformBounds(new Wpf.Rect(field.RenderSize));
-        fieldBounds.Union(label.TransformToAncestor(body).TransformBounds(new Wpf.Rect(label.RenderSize))); body.BringIntoView(fieldBounds);
         field.Focus(); if (field == limit) limit.SelectAll();
+        // TextBox focus schedules its own caret scroll. Reveal the whole error
+        // after that request, so the field cannot hide the message below it.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle,new Action(() =>
+        {
+            if (!IsLoaded || !label.IsVisible) return;
+            UpdateLayout();
+            var bounds = field.TransformToAncestor(scroller).TransformBounds(new Wpf.Rect(field.RenderSize));
+            bounds.Union(label.TransformToAncestor(scroller).TransformBounds(new Wpf.Rect(label.RenderSize)));
+            if (bounds.Bottom > scroller.ViewportHeight-12) scroller.ScrollToVerticalOffset(scroller.VerticalOffset+bounds.Bottom-scroller.ViewportHeight+12);
+            else if (bounds.Top < 12) scroller.ScrollToVerticalOffset(scroller.VerticalOffset+bounds.Top-12);
+        }));
     }
     private void RecorderLabel() => recorder.Content = Ui.ButtonContent(draft.Display,"Capture");
     private void BeginRecording() { recording = true; recorder.Content = "Press a shortcut…"; recorder.Focus(); }

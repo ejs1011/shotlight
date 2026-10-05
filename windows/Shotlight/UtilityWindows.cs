@@ -45,7 +45,7 @@ internal sealed class HistoryWindow : Wpf.Window
                 if (!store.ThumbnailIsCurrent(draft.Id)) store.UpdateThumbnail(draft.Id,AnnotationCanvas.ThumbnailPng(AnnotationCanvas.Read(store.Original(draft.Id)),draft.Marks));
                 preview.Child = new Controls.Image { Source = AnnotationCanvas.Read(store.Thumbnail(draft.Id)), Stretch = Media.Stretch.Uniform };
             }
-            catch (Exception error) when (error is IOException or NotSupportedException or System.IO.FileFormatException) { preview.Child = Ui.Label("Preview unavailable",12,Ui.Muted); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException or System.IO.FileFormatException) { preview.Child = Ui.Label("Preview unavailable",12,Ui.Muted); }
             column.Children.Add(preview);
             column.Children.Add(Ui.Label(draft.CapturedAt.LocalDateTime.ToString("MMM d · h:mm tt"),14,bold:true));
             var detail = Ui.Label($"{draft.Width} × {draft.Height} px  ·  {draft.Marks.Count} annotations",12,Ui.Muted); detail.Margin = new Wpf.Thickness(0,6,0,2); column.Children.Add(detail);

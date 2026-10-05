@@ -74,7 +74,7 @@ internal static class ImageFiles
     public static byte[] Thumbnail(Bitmap image)
     {
         using var small = new Bitmap(240, 150); using var g = Graphics.FromImage(small);
-        g.Clear(Color.FromArgb(40, 44, 52));
+        g.Clear(Color.WhiteSmoke);
         g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
         float scale = Math.Min(240f / image.Width, 150f / image.Height);
         float w = image.Width * scale, h = image.Height * scale;

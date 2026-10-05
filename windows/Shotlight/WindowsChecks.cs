@@ -166,7 +166,11 @@ internal static class WindowsChecks
                 int applied = 0, confirmed = 0; UserSettings? saved = null;
                 var settings = new SettingsWindow(new UserSettings { HasSeenWelcome = true },candidate => { applied++; saved = candidate; return null; },() => { },() => 5) { Height = 480 };
                 settings.Show(); settings.UpdateLayout(); settings.LimitField.Text = "0"; settings.SaveChanges(); settings.UpdateLayout();
+                settings.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 Require(applied == 0 && settings.HistoryError.Visibility == Wpf.Visibility.Visible && settings.ShortcutError.Visibility == Wpf.Visibility.Collapsed,"Retention error appeared in the shortcut section.");
+                var errorBounds = settings.HistoryError.TransformToAncestor(settings.BodyScroll).TransformBounds(new Wpf.Rect(settings.HistoryError.RenderSize));
+                var fieldBounds = settings.LimitField.TransformToAncestor(settings.BodyScroll).TransformBounds(new Wpf.Rect(settings.LimitField.RenderSize));
+                Require(fieldBounds.Top >= 0 && errorBounds.Bottom <= settings.BodyScroll.ViewportHeight+1,"Focused retention field scrolled its error out of view.");
                 settings.LimitField.Text = "2";
                 Require(settings.RetentionWarning.Text.Contains("remove 3 older drafts"),"Warning did not show the actual removal count.");
                 settings.ConfirmReduction = (limit,count) => { confirmed = count; return false; }; settings.SaveChanges(); Require(applied == 0 && confirmed == 3,"Cancelled reduction applied settings.");
