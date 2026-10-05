@@ -7,7 +7,7 @@ A personal screenshot app for Apple silicon Macs and Windows 11 x64 PCs. Capture
 Download an app ZIP from [Releases](https://github.com/ejs1011/shotlight/releases/latest):
 
 - **Mac:** `Shotlight-macOS-arm64-0.5.zip`. Requires macOS 13 or later and Apple silicon. Extract and open `Shotlight.app`, then allow Screen Recording when prompted.
-- **Windows:** `Shotlight-Windows-x64-1.0.zip`. Requires Windows 11 on Intel/AMD x64. Extract and run `Shotlight.exe`. The .NET runtime is included.
+- **Windows:** `Shotlight-Windows-x64-1.1.zip`. Requires Windows 11 on Intel/AMD x64. Extract and run `Shotlight.exe`. The .NET runtime is included.
 
 These are personal builds without a paid publisher certificate or Apple notarization. The Mac app is locally signed.
 

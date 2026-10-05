@@ -38,6 +38,26 @@ jobs:
           if (Test-Path $report) { Get-Content $report }
           if ($process.ExitCode -ne 0) { throw "Windows checks failed: $($process.ExitCode)" }
           if (-not (Test-Path $report)) { throw 'Windows checks did not produce a report' }
+      - name: Render actual Windows UI previews
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'windows/artifacts/win-x64/Shotlight.exe').Path
+          $previews = Join-Path $env:RUNNER_TEMP 'Shotlight-previews'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--render-previews', ('"' + $previews + '"')) -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            $process.Kill()
+            throw 'UI preview rendering timed out'
+          }
+          if ($process.ExitCode -ne 0) {
+            Get-Content (Join-Path $previews 'preview-error.txt') -ErrorAction SilentlyContinue
+            throw 'UI preview rendering failed'
+          }
+      - name: Upload interface previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-interface-previews
+          path: ${{ runner.temp }}/Shotlight-previews/
+          if-no-files-found: error
       - name: Include user instructions
         shell: pwsh
         run: |

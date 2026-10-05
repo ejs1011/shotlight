@@ -1,9 +1,14 @@
-SHOTLIGHT 1.0 FOR WINDOWS — personal, local screenshot capture
+SHOTLIGHT 1.1 FOR WINDOWS — personal, local screenshot capture
 
 Target: Windows 11 on an Intel/AMD 64-bit (x64) PC.
 
+WHAT IS NEW IN 1.1
+A refreshed interface with rounded controls, vector tool icons, quick color
+swatches, an indigo Copy & Close action, a centered screenshot workspace,
+thumbnail cards in Recent Captures, and reorganized Settings.
+
 GET STARTED
-Extract Shotlight-Windows-x64-1.0.zip to a folder, then double-click
+Extract Shotlight-Windows-x64-1.1.zip to a folder, then double-click
 Shotlight.exe. No installer, administrator access, or separate .NET
 installation is required; the executable includes its runtime.
 
@@ -27,7 +32,8 @@ type directly over the screenshot with a transparent background.
 Enter commits text; Shift+Enter adds a line; Escape cancels the edit.
 Click an existing text annotation with the Text tool to edit it again.
 Clear its text and commit to remove it. Color and width controls update
-the active text. The currently selected drawing tool is shown in bold.
+the active text. The selected drawing tool has an indigo highlight. Quick color swatches
+and a custom color picker sit beside the stroke-size control.
 
 Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes. Undo/redo also works for text
 edits. Zoom controls change the editor preview, not the exported pixels.
@@ -93,9 +99,10 @@ live text drafts, snapshot isolation, restart recovery, original byte
 preservation, retention, incomplete/corrupt draft recovery, clearing,
 and configurable shortcut/settings persistence.
 
-The Windows desktop interface, actual screen capture, mixed-monitor DPI,
-global hotkey, and real clipboard integration could not be executed on
-this Mac. They need a Windows test run. Run-Checks.cmd is included for
+The GitHub workflow runs the Windows generated-image checks and renders
+the actual editor, Recent Captures, and Settings for visual review. Actual
+screen capture, mixed-monitor DPI, global hotkeys, and real clipboard
+integration still need a manual check on the target Windows computer. Run-Checks.cmd is included for
 generated-image Windows checks of the selector, WPF rendering, inline
 text, PNG export, and Ctrl+C copy-close with an injected clipboard writer.
 Those checks use temporary history and do not capture your desktop or

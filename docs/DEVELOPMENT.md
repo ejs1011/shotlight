@@ -1,6 +1,6 @@
 # Development and handoff
 
-Shotlight has two native applications: macOS 0.5 (Swift/AppKit, Apple silicon, macOS 13+) and Windows 1.0 (C#/.NET 10, WPF/WinForms, Windows 11 x64). Source is organized by platform; history formats and settings are local to each app.
+Shotlight has two native applications: macOS 0.5 (Swift/AppKit, Apple silicon, macOS 13+) and Windows 1.1 (C#/.NET 10, WPF/WinForms, Windows 11 x64). Source is organized by platform; history formats and settings are local to each app.
 
 ## Working across computers
 
@@ -73,3 +73,9 @@ CI generated-image tests cannot establish real display capture, monitor scaling,
 ## Build downloads
 
 Published app ZIPs live in [GitHub Releases](https://github.com/ejs1011/shotlight/releases), outside Git history. GitHub also provides source ZIPs for release tags. The Windows build workflow uploads an app artifact and a check report for each run. The two applications have independent version numbers; a repository release may bundle both.
+
+## Interface previews
+
+The Windows workflow publishes a `Windows-interface-previews` artifact containing renders of the actual editor (normal and compact widths), recent captures, and settings. The images use synthetic content and temporary history. They can be reviewed on a Mac without taking a screenshot of a real desktop.
+
+To render them locally on Windows, launch `Shotlight.exe --render-previews PATH_TO_OUTPUT_FOLDER` and wait for the process to finish. Shared control styles live in `windows/Shotlight/Theme.xaml`; native vector icons and layout helpers live in `Ui.cs`. The annotation text box retains its transparent canvas-specific styling.

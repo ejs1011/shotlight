@@ -11,6 +11,8 @@ internal static class Program
         System.Windows.Forms.Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         System.Windows.Forms.Application.EnableVisualStyles();
         if (args.Contains("--run-checks")) return WindowsChecks.Run(args);
+        int previewFlag = Array.IndexOf(args,"--render-previews");
+        if (previewFlag >= 0) return previewFlag+1 < args.Length ? UiPreview.Run(args[previewFlag+1]) : 1;
         using var singleInstance = new Mutex(true,"Local\\Shotlight.Personal.Windows",out bool first);
         if (!first) { Wpf.MessageBox.Show("Shotlight is already running. Look for its camera icon in the system tray.","Shotlight"); return 0; }
         var app = new Wpf.Application { ShutdownMode = Wpf.ShutdownMode.OnExplicitShutdown };
@@ -50,7 +52,7 @@ internal sealed class AppController : IDisposable
         var menu = new ContextMenuStrip(); captureItem = new ToolStripMenuItem("Capture Area  " + settings.Shortcut.Display,null,(_,_) => QueueCapture());
         menu.Items.Add(captureItem);
         menu.Items.Add("Recent Captures…",null,(_,_) => ShowHistory()); menu.Items.Add("Settings…",null,(_,_) => ShowSettings());
-        menu.Items.Add("About Shotlight",null,(_,_) => Wpf.MessageBox.Show("Shotlight 1.0 for Windows\n\n" + settings.Shortcut.Display + " captures a frozen desktop. Drag to select an area; Escape cancels.\n\nAnnotate locally. Ctrl+C copies the screenshot and closes its editor. Ctrl+S saves a PNG. Recent Captures retains editable drafts automatically.","Shotlight"));
+        menu.Items.Add("About Shotlight",null,(_,_) => Wpf.MessageBox.Show("Shotlight 1.1 for Windows\n\n" + settings.Shortcut.Display + " captures a frozen desktop. Drag to select an area; Escape cancels.\n\nAnnotate locally. Ctrl+C copies the screenshot and closes its editor. Ctrl+S saves a PNG. Recent Captures retains editable drafts automatically.","Shotlight"));
         menu.Items.Add(new ToolStripSeparator()); menu.Items.Add("Quit Shotlight",null,(_,_) => Quit());
         tray = new NotifyIcon { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application, Text = "Shotlight", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_,_) => QueueCapture();
