@@ -52,12 +52,17 @@ internal sealed class AppController : IDisposable
         var menu = new ContextMenuStrip(); captureItem = new ToolStripMenuItem("Capture Area  " + settings.Shortcut.Display,null,(_,_) => QueueCapture());
         menu.Items.Add(captureItem);
         menu.Items.Add("Recent Captures…",null,(_,_) => ShowHistory()); menu.Items.Add("Settings…",null,(_,_) => ShowSettings());
-        menu.Items.Add("About Shotlight",null,(_,_) => Wpf.MessageBox.Show("Shotlight 1.1 for Windows\n\n" + settings.Shortcut.Display + " captures a frozen desktop. Drag to select an area; Escape cancels.\n\nAnnotate locally. Ctrl+C copies the screenshot and closes its editor. Ctrl+S saves a PNG. Recent Captures retains editable drafts automatically.","Shotlight"));
+        menu.Items.Add("About Shotlight",null,(_,_) => Wpf.MessageBox.Show("Shotlight 1.2 for Windows\n\n" + settings.Shortcut.Display + " captures a frozen desktop. Drag to select an area; Escape cancels.\n\nAnnotate locally. Ctrl+C copies the screenshot. Settings controls whether copying closes its editor (on by default). Ctrl+S saves a PNG. Recent Captures retains editable drafts automatically.","Shotlight"));
         menu.Items.Add(new ToolStripSeparator()); menu.Items.Add("Quit Shotlight",null,(_,_) => Quit());
         tray = new NotifyIcon { Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application, Text = "Shotlight", ContextMenuStrip = menu, Visible = true };
         tray.DoubleClick += (_,_) => QueueCapture();
         if (!hotkey.Register(settings.Shortcut)) Wpf.MessageBox.Show("The capture shortcut is already in use. Open Shotlight Settings from the tray to choose another; Capture Area remains available in the menu.","Shortcut unavailable");
-        tray.ShowBalloonTip(5000,"Shotlight is ready",$"Press {settings.Shortcut.Display}, or right-click this icon to capture.",ToolTipIcon.Info);
+        if (!settings.HasSeenWelcome)
+        {
+            var welcome = new WelcomeWindow(settings.Shortcut,QueueCapture); welcome.Show();
+            settings = settings with { HasSeenWelcome = true };
+            try { settings.Save(settingsPath); } catch (Exception error) { Ui.Error("Could not save welcome preference",error); }
+        }
         if (store.RecoveryWarnings.Count > 0) Wpf.MessageBox.Show($"{store.RecoveryWarnings.Count} stored draft(s) could not be loaded. Their files have been left in {store.Root}.","Some history could not be loaded");
     }
     private void HistoryChanged() { history?.Reload(); foreach (var editor in editors.ToArray()) editor.UpdateNavigation(); }
@@ -84,27 +89,27 @@ internal sealed class AppController : IDisposable
             catch (Exception error) { frozen?.Dispose(); frozen = null; capturing = false; Ui.Error("Capture failed",error); }
         }));
     }
-    internal EditorWindow OpenNew(Bitmap bitmap)
+    internal EditorWindow OpenNew(Bitmap bitmap, Action<Bitmap>? copyWriter = null)
     {
         byte[] png = ImageFiles.Png(bitmap);
         try
         {
-            var draft = store.Add(png,ImageFiles.Thumbnail(bitmap),bitmap.Width,bitmap.Height); return Open(draft.Id);
+            var draft = store.Add(png,ImageFiles.Thumbnail(bitmap),bitmap.Width,bitmap.Height); return Open(draft.Id,copyWriter);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             // A storage failure must still leave the captured pixels available
             // for a manual save or copy instead of discarding the screenshot.
             var draft = new CaptureDraft { Id = Guid.NewGuid(), CapturedAt = DateTimeOffset.Now, Width = bitmap.Width, Height = bitmap.Height };
-            var editor = new EditorWindow(this,store,draft.Id,png,draft); editors.Add(editor); editor.Show(); editor.Activate();
+            var editor = new EditorWindow(this,store,draft.Id,png,draft,copyWriter); editors.Add(editor); editor.Show(); editor.Activate();
             Ui.Error("Screenshot not retained — save or copy before closing",error); return editor;
         }
     }
-    private EditorWindow Open(Guid id)
+    private EditorWindow Open(Guid id, Action<Bitmap>? copyWriter = null)
     {
         var existing = editors.FirstOrDefault(e => e.CaptureId == id);
         if (existing is not null) { if (existing.WindowState == Wpf.WindowState.Minimized) existing.WindowState = Wpf.WindowState.Normal; existing.Activate(); return existing; }
-        var editor = new EditorWindow(this,store,id); editors.Add(editor); editor.Show(); editor.Activate(); return editor;
+        var editor = new EditorWindow(this,store,id,copyWriter:copyWriter); editors.Add(editor); editor.Show(); editor.Activate(); return editor;
     }
     public void EditorClosed(EditorWindow editor) => editors.Remove(editor);
     public void Navigate(EditorWindow editor, int direction)
@@ -133,26 +138,28 @@ internal sealed class AppController : IDisposable
     {
         if (settingsWindow is null)
         {
-            settingsWindow = new SettingsWindow(settings,ApplySettings,ClearHistory); settingsWindow.Closed += (_,_) => settingsWindow = null; settingsWindow.Show();
+            settingsWindow = new SettingsWindow(settings,ApplySettings,ClearHistory,() => store.Records.Count); settingsWindow.Closed += (_,_) => settingsWindow = null; settingsWindow.Show();
         }
         settingsWindow.Activate();
     }
-    private string? ApplySettings(UserSettings candidate)
+    internal SettingsFailure? ApplySettings(UserSettings candidate)
     {
-        if (editors.Any(e => !e.Flush())) return "A draft could not be retained. Save it before changing settings.";
+        if (editors.Any(e => !e.Flush())) return new(SettingField.General,"A draft could not be retained. Save it before changing settings.");
         var previous = settings;
         bool changedShortcut = candidate.Shortcut.Key != previous.Shortcut.Key || candidate.Shortcut.Modifiers != previous.Shortcut.Modifiers;
-        if (hotkey is not null && (changedShortcut || !hotkey.HasRegistration) && !hotkey.Register(candidate.Shortcut)) return "That shortcut is already in use. Choose another combination; any registered shortcut remains active.";
+        if (hotkey is not null && (changedShortcut || !hotkey.HasRegistration) && !hotkey.Register(candidate.Shortcut)) return new(SettingField.Shortcut,"That shortcut is already in use. Choose another combination; any registered shortcut remains active.");
+        var failureField = SettingField.General;
         try
         {
-            candidate.Save(settingsPath); store.SetLimit(candidate.HistoryLimit); settings = candidate;
-            if (captureItem is not null) captureItem.Text = "Capture Area  " + settings.Shortcut.Display; return null;
+            candidate.Save(settingsPath); failureField = SettingField.History; store.SetLimit(candidate.HistoryLimit); settings = candidate;
+            if (captureItem is not null) captureItem.Text = "Capture Area  " + settings.Shortcut.Display;
+            foreach (var editor in editors) editor.ApplyCopyPreference(settings.CloseEditorAfterCopy); return null;
         }
         catch (Exception error)
         {
             if (changedShortcut) hotkey?.Register(previous.Shortcut);
             try { previous.Save(settingsPath); } catch { /* Preserve the main error in the settings UI. */ }
-            return error.Message;
+            return new(failureField,error.Message);
         }
     }
     private void ClearHistory()
@@ -178,4 +185,5 @@ internal sealed class AppController : IDisposable
         frozen?.Dispose(); hotkey?.Dispose(); if (tray is not null) { tray.Visible = false; tray.ContextMenuStrip?.Dispose(); tray.Icon?.Dispose(); tray.Dispose(); }
     }
     internal CaptureStore TestStore => store;
+    internal UserSettings Settings => settings;
 }

@@ -1,15 +1,20 @@
-SHOTLIGHT 1.1 FOR WINDOWS — personal, local screenshot capture
+SHOTLIGHT 1.2 FOR WINDOWS — personal, local screenshot capture
 
 Target: Windows 11 on an Intel/AMD 64-bit (x64) PC.
 
-WHAT IS NEW IN 1.1
-A compact floating toolbar with rounded icon buttons, hover labels, and
-an indigo Copy & Close action. Color and stroke size open small menus.
-More (•••) contains recent captures, previous/next, zoom, and settings.
-Recent Captures uses thumbnail cards and Settings groups its controls.
+WHAT IS NEW IN 1.2
+Oversized captures open fitted to the editor. Visible Fit / 100% controls
+and a percentage readout adjust the preview without changing PNG pixels.
+The toolbar shows independent stroke widths in px and text sizes in pt.
+Copy is labeled Copy & Close by default; Settings can keep the editor open
+instead. Both Ctrl+C and the button honor the saved preference immediately.
+History thumbnails include current annotations and refresh older drafts.
+Settings shows errors beside their fields, keeps Save/Cancel visible while
+scrolling, and confirms reductions that remove older drafts. A short welcome
+appears once; later launches remain quietly in the system tray.
 
 GET STARTED
-Extract Shotlight-Windows-x64-1.1.zip to a folder, then double-click
+Extract Shotlight-Windows-x64-1.2.zip to a folder, then double-click
 Shotlight.exe. No installer, administrator access, or separate .NET
 installation is required; the executable includes its runtime.
 
@@ -32,17 +37,23 @@ Choose Pen, Arrow, Rectangle, or Text. Drag to draw. Click with Text to
 type directly over the screenshot with a transparent background.
 Enter commits text; Shift+Enter adds a line; Escape cancels the edit.
 Click an existing text annotation with the Text tool to edit it again.
-Clear its text and commit to remove it. Color and width controls update
-the active text. The selected drawing tool has an indigo highlight. Click the color dot
-for presets or a custom color; the adjacent line icon controls stroke size.
+Clear its text and commit to remove it. Color and text size update the
+active text. Text offers 16, 24, and 48 pt; drawing tools offer 2, 4, and 8 px.
+Changing font size does not change the selected stroke width. The selected drawing tool has an indigo highlight. Click the color dot
+for presets or a custom color; the adjacent labeled control changes size.
 
 Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes. Undo/redo also works for text
-edits. More → Zoom changes the editor preview, not the exported pixels.
-Large screenshots can be scrolled in both directions.
+edits. Fit shows the whole capture and follows window resizing. 100% shows
+the original canvas scale for detail. Ctrl+mouse wheel or More → Zoom selects
+a manual scale; choose Fit to resume automatic fitting. The toolbar has its
+own space below the screenshot. Large images scroll in both directions.
+Preview scaling never changes the exported pixels.
 
 COPY AND SAVE
-Ctrl+C or Copy & Close commits active text, copies the complete annotated
-image to the Windows clipboard, and closes the editor. This shortcut also
+Ctrl+C or the labeled Copy button commits active text and copies the complete
+annotated image to the Windows clipboard. Copying closes the editor by
+default. Uncheck Close editor after copying in Settings to keep editing;
+the button changes to Copy and the setting applies to already-open editors. This shortcut also
 copies the whole screenshot while typing an annotation. The clipboard
 contains both PNG and Windows Bitmap formats for compatibility.
 Ctrl+S or Save exports a PNG to a folder you choose. Saving leaves the
@@ -51,14 +62,17 @@ editor open. Exports retain the original selected area's pixel dimensions.
 RECOVER AN EARLIER SCREENSHOT
 New captures enter Recent Captures automatically before the editor opens.
 Closing, copying, and saving keep the draft in history. Reopen a screenshot
-by clicking its thumbnail in Recent Captures. Previous moves to an older
+by clicking its thumbnail in Recent Captures. Thumbnails show your current
+annotations and refresh on edits, active-text autosaves, and undo/redo.
+Older draft thumbnails are upgraded when the history browser opens. Previous moves to an older
 capture; Next moves to a newer one. Existing open editors are reused.
 Editable annotations and undo/redo survive quitting and restarting.
 Typing is archived after a 250 ms pause; closing, copying, navigation,
 and quitting flush pending edits immediately.
 
 Settings lets you keep 1–500 captures; the default is 50. The oldest
-captures are removed when that limit is exceeded. Editing an older draft
+captures are removed when that limit is exceeded. Lowering the limit shows
+the actual removal count and asks for confirmation before applying it. Editing an older draft
 does not change its position. An open editor for an evicted capture stays
 available to save or copy and shows that it is outside recent history.
 Clear History asks for confirmation, moves retained drafts to the Recycle
@@ -69,7 +83,10 @@ Open Settings. Click the capture shortcut, press the combination, and Save.
 Include Ctrl, Alt, or Win. Ctrl+C is reserved for copying screenshots;
 F12 is reserved by Windows. If Windows rejects an occupied shortcut,
 the current shortcut stays active. Restore Default selects Ctrl+Shift+S.
-Shortcut and retention settings persist across launches.
+Shortcut, retention, copy behavior, and the welcome preference persist across
+launches. Settings errors appear beside their field; invalid retention values
+focus the number field and scroll the error into view. Copy & Close remains
+the default for existing settings files that predate this option.
 
 LOCAL STORAGE
 No upload, account, analytics, or application network service.
@@ -95,17 +112,20 @@ does not have a publisher signing certificate.
 
 VERIFICATION
 Compiled for win-x64 using .NET SDK 10.0.401 with warnings treated as errors.
-14 core checks passed on the Mac build host: selection geometry, undo/redo,
+Core checks cover: selection geometry, undo/redo,
 live text drafts, snapshot isolation, restart recovery, original byte
 preservation, retention, incomplete/corrupt draft recovery, clearing,
-and configurable shortcut/settings persistence.
+configurable shortcut/settings persistence, old-settings compatibility,
+thumbnail invalidation/upgrades, and fitting landscape/portrait captures.
 
 The GitHub workflow runs the Windows generated-image checks and renders
 the actual editor, Recent Captures, and Settings for visual review. Actual
 screen capture, mixed-monitor DPI, global hotkeys, and real clipboard
 integration still need a manual check on the target Windows computer. Run-Checks.cmd is included for
 generated-image Windows checks of the selector, WPF rendering, inline
-text, PNG export, and Ctrl+C copy-close with an injected clipboard writer.
+text, PNG export, both copy modes with an injected clipboard writer, compact
+Fit/100%, point sizes independent of drawing widths, annotated and older
+thumbnail refresh, inline validation, and cancelled retention reductions.
 Those checks use temporary history and do not capture your desktop or
 replace your clipboard. A report is written to Shotlight-checks.txt.
 They supplement a manual capture/annotate/copy/reopen check on your PC.

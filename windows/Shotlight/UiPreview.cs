@@ -24,12 +24,18 @@ internal static class UiPreview
             editor.Canvas.Document.Add(new(Tool.Text,[new(382,68)],0xFF5265E9,4,"Ready for a little adventure"));
             editor.Flush(); editor.Canvas.InvalidateVisual();
             Render(editor,directory,"editor",1200,820);
-            Render(editor,directory,"editor-compact",820,700);
+            Render(editor,directory,"editor-compact",760,550);
+            editor.ApplyCopyPreference(false);
+            var textTool = FindTools(editor).Single(button => Wpf.Automation.AutomationProperties.GetName(button) == "Text"); textTool.RaiseEvent(new Wpf.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Render(editor,directory,"editor-copy-open",820,700);
             editor.Close();
             for (int i = 0; i < 5; i++)
                 owner.TestStore.Add(ImageFiles.Png(sample),ImageFiles.Thumbnail(sample),sample.Width,sample.Height,DateTimeOffset.Now.AddHours(-i-1));
             var history = new HistoryWindow(owner.TestStore,_ => { }); history.Show(); Render(history,directory,"recent-captures",840,680); history.Close();
-            var settings = new SettingsWindow(new UserSettings(),_ => null,() => { }); settings.Show(); Render(settings,directory,"settings",550,null); settings.Close();
+            var settings = new SettingsWindow(new UserSettings(),_ => null,() => { },() => owner.TestStore.Records.Count); settings.Show(); Render(settings,directory,"settings",550,null);
+            settings.LimitField.Text = "2"; Render(settings,directory,"settings-retention",550,null);
+            settings.Height = 480; settings.UpdateLayout(); settings.LimitField.Text = "0"; settings.SaveChanges(); Render(settings,directory,"settings-validation",550,480); settings.Close();
+            var welcome = new WelcomeWindow(CaptureShortcut.Default,() => { }); welcome.Show(); Render(welcome,directory,"welcome",480,null); welcome.Close();
             return 0;
         }
         catch (Exception error) { File.WriteAllText(Path.Combine(directory,"preview-error.txt"),error.ToString()); return 1; }
@@ -40,12 +46,17 @@ internal static class UiPreview
             app.Shutdown(); if (Directory.Exists(temporary)) Directory.Delete(temporary,true);
         }
     }
+    private static IEnumerable<System.Windows.Controls.Primitives.ToggleButton> FindTools(Wpf.DependencyObject root)
+    {
+        if (root is System.Windows.Controls.Primitives.ToggleButton button) yield return button;
+        foreach (var child in Wpf.LogicalTreeHelper.GetChildren(root).OfType<Wpf.DependencyObject>()) foreach (var tool in FindTools(child)) yield return tool;
+    }
     private static void Render(Wpf.Window window, string directory, string name, double width, double? height)
     {
         window.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         window.Width = width; if (height is double h) window.Height = h;
         window.UpdateLayout();
-        window.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.Render);
+        window.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         var content = (Wpf.FrameworkElement)window.Content; content.UpdateLayout();
         var image = new Imaging.RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth),(int)Math.Ceiling(content.ActualHeight),96,96,Media.PixelFormats.Pbgra32);
         // Window.Background is outside the content visual. Composite it first
