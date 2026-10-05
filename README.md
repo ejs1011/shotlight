@@ -49,7 +49,7 @@ Install Apple's Xcode Command Line Tools, then run from the repository root:
 ./macos/scripts/build-app.sh
 ```
 
-The app is written to `macos/artifacts/Shotlight.app`. Build on an Apple silicon Mac.
+The app is written to `macos/artifacts/Shotlight.app`, with a distribution ZIP at `macos/artifacts/Shotlight-macOS-arm64.zip`. Build on an Apple silicon Mac.
 
 ### Windows
 

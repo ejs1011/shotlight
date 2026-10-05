@@ -83,7 +83,9 @@ Install Apple's Xcode Command Line Tools, then run:
   ./scripts/build-app.sh
 from the macos folder. This builds artifacts/Shotlight.app and signs it locally
 (ad hoc). It does not require a paid Apple Developer account. The app is
-a personal-use build and is not notarized for distribution.
+a personal-use build and is not notarized for distribution. A ZIP is also
+written to artifacts/Shotlight-macOS-arm64.zip from the clean, verified
+staging bundle, before synced folders can add Finder metadata.
 
 CHECKS
 The executable supports --run-checks for AppKit regression checks using

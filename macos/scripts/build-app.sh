@@ -27,6 +27,9 @@ cat > "$TASK_APP/Contents/Info.plist" <<'PLIST'
 PLIST
 xattr -cr "$TASK_APP"
 codesign --force --sign - "$TASK_APP"
+codesign --verify --deep --strict "$TASK_APP"
 mkdir -p "$PWD/artifacts"
 ditto "$TASK_APP" "$PWD/artifacts/Shotlight.app"
+# Package the verified staging bundle before a synced output folder can add metadata.
+ditto -c -k --keepParent "$TASK_APP" "$PWD/artifacts/Shotlight-macOS-arm64.zip"
 echo "Built $PWD/artifacts/Shotlight.app (staged at $TASK_APP)"
