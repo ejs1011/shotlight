@@ -36,6 +36,8 @@ ANNOTATE
 Choose Pen, Arrow, Rectangle, or Text. Drag to draw. Click with Text to
 type directly over the screenshot with a transparent background.
 Enter commits text; Shift+Enter adds a line; Escape cancels the edit.
+Text moves inward as it grows near the screenshot's right or bottom edge.
+All rows, including the blank row after Shift+Enter, stay visible while typing.
 Click an existing text annotation with the Text tool to edit it again.
 Clear its text and commit to remove it. Color and text size update the
 active text. Text offers 16, 24, and 48 pt; drawing tools offer 2, 4, and 8 px.

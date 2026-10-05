@@ -67,6 +67,63 @@ internal static class WindowsChecks
                 Require(editor.Canvas.Document.Marks.Single().Text == "First line\nSecond line","Text edit could not be undone.");
                 editor.Canvas.Redo(); Require(editor.Canvas.Document.Marks.Single().Text == "Edited","Text edit could not be redone."); editor.Close();
             });
+            Check("inline text stays inside screenshot edges while growing and changing size",() =>
+            {
+                var editor = owner.OpenNew(source);
+                foreach (double zoom in new[] { .5,1d,1.5 })
+                foreach (var origin in new PixelPoint[] { new(399,1),new(1,239),new(399,239),new(0,0) })
+                {
+                    editor.SetZoom(zoom);
+                    editor.Canvas.BeginText(origin);
+                    var box = editor.Canvas.Children.OfType<Controls.TextBox>().Single();
+                    foreach (string text in new[] { "E","Edge text","Edge text\r\nSecond line" })
+                    {
+                        box.Text = text; box.CaretIndex = box.Text.Length; editor.UpdateLayout();
+                        editor.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                        double left = Controls.Canvas.GetLeft(box), top = Controls.Canvas.GetTop(box);
+                        Require(left >= 0 && top >= 0 && left+box.ActualWidth <= 400.01 && top+box.ActualHeight <= 240.01,$"Typing clipped the inline editor at {origin}: {left},{top} {box.ActualWidth}×{box.ActualHeight}, requested {box.Width}×{box.Height}.");
+                        Require(box.HorizontalOffset < .01 && box.VerticalOffset < .01,"Growing text scrolled earlier characters out of view.");
+                        var mark = editor.Canvas.DraftSnapshot().Marks.Last();
+                        Require(Math.Abs(mark.Points[0].X-left) < .01 && Math.Abs(mark.Points[0].Y-top) < .01,"Autosaved text did not use its visible position.");
+                    }
+                    box.Text = "Sized";
+                    foreach (float points in new[] { 48f,16f,24f })
+                    {
+                        editor.Canvas.FontSizePoints = points; editor.UpdateLayout();
+                        Require(Controls.Canvas.GetLeft(box)+box.ActualWidth <= 400.01 && Controls.Canvas.GetTop(box)+box.ActualHeight <= 240.01,"Changing font size clipped edge text.");
+                    }
+                    var snapshot = editor.Canvas.DraftSnapshot(); editor.Canvas.FinishText();
+                    Require(AnnotationDocument.Equal(snapshot.Marks,editor.Canvas.Document.Marks),"Committing moved the visible text.");
+                    int index = editor.Canvas.Document.Marks.Count-1; editor.Canvas.BeginText(origin,index);
+                    Require(AnnotationDocument.Equal(snapshot.Marks,editor.Canvas.DraftSnapshot().Marks),"Reopening moved edge text.");
+                    editor.Canvas.Children.OfType<Controls.TextBox>().Single().Text = "Cancel this change";
+                    editor.Canvas.FinishText(cancel: true);
+                    Require(AnnotationDocument.Equal(snapshot.Marks,editor.Canvas.Document.Marks),"Cancelling changed the saved edge annotation.");
+                    editor.Canvas.FontSizePoints = 24;
+                }
+                Require(editor.Flush(),"Edge annotations could not be archived.");
+                var restored = new CaptureStore(owner.TestStore.Root).Get(editor.CaptureId);
+                Require(AnnotationDocument.Equal(restored.Marks,editor.Canvas.Document.Marks),"Saved edge positions changed after restart.");
+                using var output = ImageFiles.Read(editor.Canvas.ExportPng());
+                Require(output.Width == 400 && output.Height == 240,"Moving edge text changed PNG dimensions."); editor.Close();
+            });
+            Check("multiline typing keeps preceding lines and the trailing blank line visible",() =>
+            {
+                var editor = owner.OpenNew(source); editor.Canvas.BeginText(new(30,30));
+                var box = editor.Canvas.Children.OfType<Controls.TextBox>().Single();
+                box.Text = "First line"; box.CaretIndex = box.Text.Length;
+                System.Windows.Documents.EditingCommands.EnterLineBreak.Execute(null,box);
+                Require(editor.Canvas.IsEditing && box.Text.EndsWith('\n'),"The native newline command committed or lost the line break.");
+                foreach (string text in new[] { "First line\r\n","First line\r\nSecond line","First line\r\nSecond line\r\n","First line\n\nThird line\n" })
+                {
+                    box.Text = text; box.CaretIndex = box.Text.Length; editor.UpdateLayout();
+                    editor.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                    var first = box.GetRectFromCharacterIndex(0); var caret = box.GetRectFromCharacterIndex(box.Text.Length);
+                    Require(!first.IsEmpty && !caret.IsEmpty && first.Top >= 0 && caret.Bottom <= box.ActualHeight+.01,$"The first line or final caret was outside the inline editor: first {first}, caret {caret}, height {box.ActualHeight}, extent {box.ExtentHeight}, viewport {box.ViewportHeight}, offset {box.VerticalOffset}.");
+                    Require(box.VerticalOffset < .01 && box.ExtentHeight <= box.ViewportHeight+.01,"A new line hid the rows above it.");
+                }
+                editor.Canvas.FinishText(); editor.Close();
+            });
             Check("Ctrl+C commits text, copies the image, closes the editor, and retains its draft",() =>
             {
                 var editor = owner.OpenNew(source); Guid id = editor.CaptureId; editor.Canvas.BeginText(new(40,30));
