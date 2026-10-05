@@ -16,7 +16,7 @@ internal sealed class EditorWindow : Wpf.Window
     private readonly Controls.ScrollViewer scroll = new() { HorizontalScrollBarVisibility = Controls.ScrollBarVisibility.Auto, VerticalScrollBarVisibility = Controls.ScrollBarVisibility.Auto, Background = Ui.Brush("#E9ECF2"), HorizontalContentAlignment = Wpf.HorizontalAlignment.Center, VerticalContentAlignment = Wpf.VerticalAlignment.Center };
     private readonly Controls.Button previous, next, undo, redo;
     private readonly Controls.Border canvasFrame = new() { Margin = new Wpf.Thickness(32), Background = Media.Brushes.White, Effect = new Media.Effects.DropShadowEffect { BlurRadius = 24, ShadowDepth = 3, Opacity = .14 } };
-    private readonly System.Windows.Shapes.Ellipse colorChip = new() { Width = 16, Height = 16 };
+    private readonly System.Windows.Shapes.Ellipse colorChip = new() { Width = 16, Height = 16, Stroke = Ui.Line, StrokeThickness = 1 };
     private readonly Controls.TextBlock dimensions = Ui.Label("",12,Ui.Muted);
     private readonly Controls.TextBlock status = new() { VerticalAlignment = Wpf.VerticalAlignment.Center, Foreground = Ui.Muted, Margin = new Wpf.Thickness(6,0,0,0) };
     private readonly System.Windows.Threading.DispatcherTimer autosave = new() { Interval = TimeSpan.FromMilliseconds(250) };
@@ -35,7 +35,7 @@ internal sealed class EditorWindow : Wpf.Window
         var branding = new Controls.StackPanel { Orientation = Controls.Orientation.Horizontal };
         var logo = new Controls.Border { Width = 40, Height = 40, Background = Ui.Accent, CornerRadius = new Wpf.CornerRadius(12), Margin = new Wpf.Thickness(0,0,12,0) };
         var camera = Ui.Icon("Capture",22); camera.Stroke = Media.Brushes.White; logo.Child = camera; branding.Children.Add(logo);
-        var name = new Controls.StackPanel(); name.Children.Add(Ui.Label("Shotlight",21,bold:true)); name.Children.Add(Ui.Label("A little clarity, captured.",12,Ui.Muted)); branding.Children.Add(name); header.Children.Add(branding);
+        var name = new Controls.StackPanel(); name.Children.Add(Ui.Label("Shotlight",21,bold:true)); name.Children.Add(Ui.Label("Capture, annotate, keep.",12,Ui.Muted)); branding.Children.Add(name); header.Children.Add(branding);
         var actions = new Controls.StackPanel { Orientation = Controls.Orientation.Horizontal, VerticalAlignment = Wpf.VerticalAlignment.Center };
         actions.Children.Add(Ui.Button("New capture",owner.QueueCapture,"Capture",hint:"Capture a new area"));
         actions.Children.Add(Ui.Button("Save",Save,"Save",hint:"Save PNG · Ctrl+S"));

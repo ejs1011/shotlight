@@ -48,7 +48,11 @@ internal static class UiPreview
         window.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.Render);
         var content = (Wpf.FrameworkElement)window.Content; content.UpdateLayout();
         var image = new Imaging.RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth),(int)Math.Ceiling(content.ActualHeight),96,96,Media.PixelFormats.Pbgra32);
-        image.Render(content); var encoder = new Imaging.PngBitmapEncoder(); encoder.Frames.Add(Imaging.BitmapFrame.Create(image));
+        // Window.Background is outside the content visual. Composite it first
+        // so exported previews match the opaque on-screen window.
+        var background = new Media.DrawingVisual();
+        using (var drawing = background.RenderOpen()) drawing.DrawRectangle(window.Background,null,new Wpf.Rect(0,0,content.ActualWidth,content.ActualHeight));
+        image.Render(background); image.Render(content); var encoder = new Imaging.PngBitmapEncoder(); encoder.Frames.Add(Imaging.BitmapFrame.Create(image));
         using var file = File.Create(Path.Combine(directory,name+".png")); encoder.Save(file);
     }
     private static Bitmap Sample()
