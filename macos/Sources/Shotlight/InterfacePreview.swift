@@ -47,11 +47,20 @@ func renderInterfacePreviews(to directory: URL) throws {
     try render(editor,"mac-editor",NSSize(width: 1040,height: 640))
     try render(editor,"mac-editor-compact",NSSize(width: 720,height: 550))
     try render(editor,"mac-editor-dark",NSSize(width: 1040,height: 640),dark: true)
+    editor.closesAfterCopy = false
+    editor.compactTools[Tool.text.rawValue].performClick(nil)
+    try render(editor,"mac-editor-copy-open",NSSize(width: 720,height: 550))
     for i in 0..<5 { try store.add(image: image,capturedAt: Date().addingTimeInterval(Double(-i-1)*3600)) }
     let history = CaptureHistoryController(store: store,open: { _ in })
     try render(history,"mac-recent-captures")
-    let settings = ShortcutSettingsController(shortcut: .standard,historyLimit: 50,clearHistory: {},apply: { _,_ in nil })
+    let settings = ShortcutSettingsController(shortcut: .standard,historyLimit: 50,clearHistory: {},apply: { _,_,_ in nil })
     try render(settings,"mac-settings")
+    try render(settings,"mac-settings-dark",dark: true)
+    settings.window?.setContentSize(NSSize(width: 520, height: 480))
+    settings.limitField.stringValue = "0"; settings.save()
+    try render(settings,"mac-settings-validation",NSSize(width: 520,height: 480))
+    let welcome = WelcomeController(shortcut: .standard, capture: {})
+    try render(welcome,"mac-welcome"); welcome.window?.close()
     editor.window?.close(); history.window?.close(); settings.window?.close()
 }
 
@@ -63,7 +72,11 @@ func compactToolbarCheck() -> String {
     guard editor.canvas.tool == .text,editor.compactTools.filter({ $0.state == .on }).count == 1 else { return "FAIL: compact tool selection" }
     let thick = editor.widthMenu.items[2]
     _ = NSApp.sendAction(thick.action!,to: thick.target,from: thick)
-    guard editor.canvas.strokeWidth == 8 else { return "FAIL: compact stroke menu" }
+    guard editor.canvas.fontSize == 48, editor.canvas.strokeWidth == 4, editor.sizeButton.title == "48 pt" else { return "FAIL: contextual text size" }
+    editor.compactTools[Tool.pen.rawValue].performClick(nil)
+    let stroke = editor.widthMenu.items[2]
+    _ = NSApp.sendAction(stroke.action!, to: stroke.target, from: stroke)
+    guard editor.canvas.strokeWidth == 8, editor.canvas.fontSize == 48, editor.sizeButton.title == "8 px" else { return "FAIL: contextual stroke width" }
     let zoom = editor.moreMenu.items.first(where: { $0.title == "Zoom" })!.submenu!.items.first(where: { $0.tag == 150 })!
     _ = NSApp.sendAction(zoom.action!,to: zoom.target,from: zoom)
     guard abs(editor.scroll.magnification-1.5) < 0.01,let png = editor.canvas.png(),let output = NSBitmapImageRep(data: png),output.pixelsWide == 400,output.pixelsHigh == 200 else { return "FAIL: preview zoom changed Retina export" }

@@ -17,7 +17,8 @@ final class CompactButton: NSButton {
             fill.setFill(); NSBezierPath(roundedRect: bounds.insetBy(dx: 1,dy: 1),xRadius: 8,yRadius: 8).fill()
         }
         contentTintColor = primary ? .white : state == .on ? .systemIndigo : .labelColor
-        super.draw(dirtyRect)
+        if title.isEmpty { super.draw(dirtyRect) }
+        else { cell?.draw(withFrame: bounds.insetBy(dx: 8, dy: 0), in: self) }
     }
 }
 
@@ -29,7 +30,7 @@ final class SurfaceView: NSView {
     var radius: CGFloat = 12
     override func draw(_ dirtyRect: NSRect) {
         NSColor.controlBackgroundColor.setFill(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: radius,yRadius: radius); path.fill()
-        NSColor.separatorColor.withAlphaComponent(0.45).setStroke(); path.lineWidth = 1; path.stroke()
+        NSColor.labelColor.withAlphaComponent(0.1).setStroke(); path.lineWidth = 1; path.stroke()
     }
 }
 
@@ -41,6 +42,14 @@ final class CenteredClipView: NSClipView {
             if documentView.frame.height < result.height { result.origin.y = (documentView.frame.height-result.height)/2 }
         }
         return result
+    }
+}
+
+final class PreviewScrollView: NSScrollView {
+    var manualZoom: (() -> Void)?
+    var zoomChanged: (() -> Void)?
+    override func magnify(with event: NSEvent) {
+        manualZoom?(); super.magnify(with: event); zoomChanged?()
     }
 }
 
@@ -60,6 +69,17 @@ enum ShotlightUI {
     static func divider() -> NSView {
         let view = NSBox(); view.boxType = .separator; view.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([view.widthAnchor.constraint(equalToConstant: 1),view.heightAnchor.constraint(equalToConstant: 22)]); return view
+    }
+    static func textButton(_ title: String, symbol: String? = nil, width: CGFloat, target: AnyObject?, action: Selector) -> CompactButton {
+        let button = CompactButton(title: title, target: target, action: action)
+        button.font = .systemFont(ofSize: 13, weight: .medium); button.isBordered = false; button.bezelStyle = .regularSquare
+        if let symbol {
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
+            button.imagePosition = .imageLeading
+        }
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([button.widthAnchor.constraint(equalToConstant: width), button.heightAnchor.constraint(equalToConstant: 36)])
+        return button
     }
     static func card(_ content: NSView, padding: CGFloat = 20) -> SurfaceView {
         let card = SurfaceView(); content.translatesAutoresizingMaskIntoConstraints = false; card.addSubview(content)

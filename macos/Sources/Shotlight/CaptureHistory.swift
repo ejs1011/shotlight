@@ -1,7 +1,7 @@
 import AppKit
 
-struct StoredPoint: Codable { let x: Double; let y: Double }
-struct StoredMark: Codable {
+struct StoredPoint: Codable, Equatable { let x: Double; let y: Double }
+struct StoredMark: Codable, Equatable {
     let tool: Int
     let points: [StoredPoint]
     let rgba: [Double]
@@ -27,8 +27,9 @@ struct CaptureRecord: Codable {
     var marks: [StoredMark]
     var undoHistory: [[StoredMark]]? = nil
     var redoHistory: [[StoredMark]]? = nil
+    var thumbnailVersion: Int? = nil
     var size: NSSize { NSSize(width: imageWidth,height: imageHeight) }
-    var displayDate: String { capturedAt.formatted(date: .abbreviated,time: .standard) }
+    var displayDate: String { capturedAt.formatted(date: .abbreviated,time: .shortened) }
 }
 enum CaptureHistoryError: LocalizedError {
     case invalidDraft, missingCapture
@@ -74,7 +75,7 @@ final class CaptureStore {
     }
     @discardableResult func add(image: NSImage, originalPNG: Data? = nil, capturedAt: Date = Date()) throws -> CaptureRecord {
         guard let png = originalPNG ?? image.tiffRepresentation.flatMap({ NSBitmapImageRep(data: $0)?.representation(using: .png,properties: [:]) }) else { throw CaptureHistoryError.invalidDraft }
-        let record = CaptureRecord(id: UUID(),capturedAt: capturedAt,imageWidth: image.size.width,imageHeight: image.size.height,marks: [])
+        let record = CaptureRecord(id: UUID(),capturedAt: capturedAt,imageWidth: image.size.width,imageHeight: image.size.height,marks: [],thumbnailVersion: 1)
         let staging = directory.appendingPathComponent(".pending-\(record.id.uuidString)",isDirectory: true)
         try FileManager.default.createDirectory(at: staging,withIntermediateDirectories: true)
         do {
@@ -106,14 +107,33 @@ final class CaptureStore {
         return try (record.redoHistory ?? []).map { try $0.map { try $0.restored() } }
     }
     func thumbnail(_ id: UUID) -> NSImage? {
-        NSImage(contentsOf: folder(id).appendingPathComponent("thumbnail.png")) ?? NSImage(contentsOf: folder(id).appendingPathComponent("original.png"))
+        let url = folder(id).appendingPathComponent("thumbnail.png")
+        // Upgrade older drafts on demand without changing their annotations or undo history.
+        if let index = records.firstIndex(where: { $0.id == id }),
+           records[index].thumbnailVersion != 1 || !FileManager.default.fileExists(atPath: url.path),
+           let image = try? image(id), let marks = try? marks(id), let png = thumbnailPNG(image, marks: marks) {
+            do {
+                try png.write(to: url, options: .atomic)
+                var updated = records[index]; updated.thumbnailVersion = 1
+                try encoder.encode(updated).write(to: folder(id).appendingPathComponent("draft.json"), options: .atomic)
+                records[index] = updated
+            } catch { /* The original image remains available if refreshing the cache fails. */ }
+        }
+        return NSImage(contentsOf: url) ?? NSImage(contentsOf: folder(id).appendingPathComponent("original.png"))
     }
     func save(_ id: UUID, marks: [Mark], undoHistory: [[Mark]] = [], redoHistory: [[Mark]] = []) throws {
         guard let index = records.firstIndex(where: { $0.id == id }) else { throw CaptureHistoryError.missingCapture }
         var updated = records[index]; updated.marks = marks.map(StoredMark.init)
         updated.undoHistory = undoHistory.map { $0.map(StoredMark.init) }; updated.redoHistory = redoHistory.map { $0.map(StoredMark.init) }
+        let marksChanged = updated.marks != records[index].marks
+        if marksChanged || updated.thumbnailVersion != 1 {
+            guard let png = thumbnailPNG(try image(id), marks: marks) else { throw CaptureHistoryError.invalidDraft }
+            try png.write(to: folder(id).appendingPathComponent("thumbnail.png"), options: .atomic)
+            updated.thumbnailVersion = 1
+        }
         try encoder.encode(updated).write(to: folder(id).appendingPathComponent("draft.json"),options: .atomic)
         records[index] = updated
+        if marksChanged { onChange?() }
     }
     func setLimit(_ value: Int) throws {
         let old = limit; limit = min(500,max(1,value))
@@ -126,7 +146,7 @@ final class CaptureStore {
         try FileManager.default.createDirectory(at: directory,withIntermediateDirectories: true,attributes: [.posixPermissions: 0o700])
         records = []; onChange?()
     }
-    private func thumbnailPNG(_ image: NSImage) -> Data? {
+    private func thumbnailPNG(_ image: NSImage, marks: [Mark] = []) -> Data? {
         guard image.size.width > 0, image.size.height > 0,
               let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,pixelsWide: 240,pixelsHigh: 150,bitsPerSample: 8,samplesPerPixel: 4,hasAlpha: true,isPlanar: false,colorSpaceName: .deviceRGB,bytesPerRow: 0,bitsPerPixel: 0),
               let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
@@ -134,7 +154,11 @@ final class CaptureStore {
         NSColor(calibratedWhite: 0.15,alpha: 1).setFill(); NSRect(x: 0,y: 0,width: 240,height: 150).fill()
         let scale = min(240 / image.size.width,150 / image.size.height)
         let size = NSSize(width: image.size.width * scale,height: image.size.height * scale)
-        image.draw(in: NSRect(x: (240-size.width)/2,y: (150-size.height)/2,width: size.width,height: size.height))
+        context.cgContext.translateBy(x: (240-size.width)/2, y: (150-size.height)/2)
+        context.cgContext.scaleBy(x: scale, y: scale)
+        image.draw(in: NSRect(origin: .zero, size: image.size))
+        let renderer = Canvas(image: image)
+        for mark in marks { renderer.draw(mark) }
         NSGraphicsContext.restoreGraphicsState()
         return bitmap.representation(using: .png,properties: [:])
     }
@@ -147,7 +171,7 @@ final class CaptureHistoryButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 12,yRadius: 12)
         (cell?.isHighlighted == true ? NSColor.systemIndigo.withAlphaComponent(0.1) : .controlBackgroundColor).setFill(); card.fill()
-        NSColor.separatorColor.withAlphaComponent(0.4).setStroke(); card.lineWidth = 1; card.stroke()
+        NSColor.labelColor.withAlphaComponent(0.1).setStroke(); card.lineWidth = 1; card.stroke()
         let preview = NSRect(x: 12,y: 68,width: bounds.width-24,height: bounds.height-80)
         NSColor.windowBackgroundColor.setFill(); NSBezierPath(roundedRect: preview,xRadius: 7,yRadius: 7).fill()
         if let image {
@@ -235,7 +259,7 @@ func historyCheck() -> String {
         reopen.canvas.undoMark(); guard reopen.canvas.marks[1].text == "Retained while typing",reopen.canvas.marks[1].points[0].y == originalTop else { return "FAIL: restored text undo" }
         let clipboard = NSPasteboard(name: NSPasteboard.Name("Shotlight-history-\(UUID().uuidString)"))
         defer { clipboard.releaseGlobally() }
-        guard reopen.copyAndDismiss(to: clipboard),try CaptureStore(directory: root,limit: 3).marks(second.id)[1].text == "Retained while typing" else { return "FAIL: copy-close retention" }
+        guard reopen.copy(to: clipboard),try CaptureStore(directory: root,limit: 3).marks(second.id)[1].text == "Retained while typing" else { return "FAIL: copy-close retention" }
         let retained = try CaptureStore(directory: root,limit: 3)
         let undoneEditor = EditorController(image: try retained.image(second.id),captureID: second.id,store: retained)
         undoneEditor.canvas.marks = try retained.marks(second.id); undoneEditor.canvas.history = try retained.undoHistory(second.id); undoneEditor.canvas.undone = try retained.redoHistory(second.id)

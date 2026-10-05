@@ -60,68 +60,6 @@ final class ShortcutRecorder: NSButton {
     }
 }
 
-final class ShortcutSettingsController: NSWindowController {
-    var draft: CaptureShortcut
-    let recorder = ShortcutRecorder()
-    let message = NSTextField(wrappingLabelWithString: "Click the shortcut, then press your preferred key combination. Include Command, Control, or Option.")
-    let apply: (CaptureShortcut, Int) -> String?
-    let limitField = NSTextField(string: "50")
-    let clearHistory: () -> Void
-    init(shortcut: CaptureShortcut, historyLimit: Int, clearHistory: @escaping () -> Void, apply: @escaping (CaptureShortcut, Int) -> String?) {
-        draft = shortcut; self.apply = apply; self.clearHistory = clearHistory; limitField.stringValue = String(historyLimit)
-        let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 470,height: 340),styleMask: [.titled,.closable],backing: .buffered,defer: false)
-        super.init(window: window); window.contentView = BackgroundView(frame: window.contentView!.bounds); window.title = "Shotlight Settings"; window.center(); window.isReleasedWhenClosed = false
-        recorder.title = draft.label; recorder.bezelStyle = .rounded
-        recorder.target = recorder; recorder.action = #selector(ShortcutRecorder.beginRecording)
-        recorder.setAccessibilityLabel("Capture shortcut")
-        recorder.recorded = { [weak self] shortcut in
-            guard let self else { return }
-            if let shortcut { self.draft = shortcut }
-            self.recorder.title = self.draft.label
-        }
-        let title = ShotlightUI.label("Make it yours",size: 26,weight: .semibold)
-        let subtitle = ShotlightUI.label("Your shortcuts. Your captures. All local.",secondary: true)
-        let label = ShotlightUI.label("Capture shortcut",size: 15,weight: .semibold)
-        message.font = .systemFont(ofSize: 12); message.textColor = .secondaryLabelColor
-        recorder.controlSize = .large; recorder.font = .systemFont(ofSize: 15,weight: .medium)
-        let reset = NSButton(title: "Restore default",target: self,action: #selector(restoreDefault)); reset.bezelStyle = .rounded
-        let shortcutStack = NSStackView(views: [label,recorder,message,reset]); shortcutStack.orientation = .vertical; shortcutStack.alignment = .leading; shortcutStack.spacing = 14
-        let shortcutCard = ShotlightUI.card(shortcutStack)
-        let historyTitle = ShotlightUI.label("Recent captures",size: 15,weight: .semibold)
-        let historyNote = NSTextField(wrappingLabelWithString: "Keep editable screenshots so you can come back to them later."); historyNote.font = .systemFont(ofSize: 12); historyNote.textColor = .secondaryLabelColor
-        let countLabel = ShotlightUI.label("Captures to keep · 1–500")
-        limitField.setAccessibilityLabel("History limit"); limitField.alignment = .center; limitField.font = .systemFont(ofSize: 14)
-        limitField.widthAnchor.constraint(equalToConstant: 70).isActive = true
-        let retention = NSStackView(views: [countLabel,limitField]); retention.spacing = 24
-        let clear = NSButton(title: "Clear history…",target: self,action: #selector(clearRecentHistory)); clear.bezelStyle = .rounded; clear.contentTintColor = .systemRed
-        let historyStack = NSStackView(views: [historyTitle,historyNote,retention,clear]); historyStack.orientation = .vertical; historyStack.alignment = .leading; historyStack.spacing = 16
-        let historyCard = ShotlightUI.card(historyStack)
-        let cancel = NSButton(title: "Cancel",target: self,action: #selector(cancel)); cancel.bezelStyle = .rounded
-        let save = NSButton(title: "Save changes",target: self,action: #selector(save)); save.bezelStyle = .rounded; save.bezelColor = .systemIndigo; save.keyEquivalent = "\r"
-        let spacer = NSView(); let actions = NSStackView(views: [spacer,cancel,save]); actions.spacing = 10
-        let stack = NSStackView(views: [title,subtitle,shortcutCard,historyCard,actions]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16
-        stack.setCustomSpacing(5,after: title); stack.setCustomSpacing(24,after: subtitle)
-        let document = CaptureHistoryList(); let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.drawsBackground = false; scroll.documentView = document
-        window.setContentSize(NSSize(width: 520,height: min(650,(NSScreen.main?.visibleFrame.height ?? 800)-80)))
-        scroll.frame = window.contentView!.bounds; scroll.autoresizingMask = [.width,.height]; window.contentView!.addSubview(scroll)
-        stack.translatesAutoresizingMaskIntoConstraints = false; document.addSubview(stack)
-        NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: document.leadingAnchor,constant: 26),stack.topAnchor.constraint(equalTo: document.topAnchor,constant: 26),stack.widthAnchor.constraint(equalToConstant: 468),shortcutCard.widthAnchor.constraint(equalTo: stack.widthAnchor),historyCard.widthAnchor.constraint(equalTo: stack.widthAnchor),actions.widthAnchor.constraint(equalTo: stack.widthAnchor),recorder.widthAnchor.constraint(equalTo: shortcutStack.widthAnchor),message.widthAnchor.constraint(equalTo: shortcutStack.widthAnchor),historyNote.widthAnchor.constraint(equalTo: historyStack.widthAnchor)])
-        document.layoutSubtreeIfNeeded(); document.frame = NSRect(x: 0,y: 0,width: 520,height: stack.fittingSize.height+52)
-        scroll.contentView.scroll(to: .zero); window.center()
-
-    }
-    required init?(coder: NSCoder) { fatalError() }
-    @objc func restoreDefault() { recorder.recording = false; draft = .standard; recorder.title = draft.label }
-    @objc func clearRecentHistory() { clearHistory() }
-    @objc func cancel() { window?.close() }
-    @objc func save() {
-        recorder.recording = false; recorder.title = draft.label
-        guard let limit = Int(limitField.stringValue), (1...500).contains(limit) else { message.stringValue = "Enter a history limit from 1 to 500."; message.textColor = .systemRed; return }
-        if let error = apply(draft,limit) { message.stringValue = error; message.textColor = .systemRed }
-        else { window?.close() }
-    }
-}
-
 final class ScreenshotWindow: NSWindow {
     var copyScreenshot: (() -> Void)?
     static func isCopyShortcut(_ event: NSEvent) -> Bool {
@@ -142,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var captureShortcut = CaptureShortcut.load(.standard)
     var captureMenuItem: NSMenuItem!
     var settingsController: ShortcutSettingsController?
+    var welcomeController: WelcomeController?
+    var closesAfterCopy = CopyPreference.closesEditor(in: .standard)
     var captureStore: CaptureStore?
     var historyController: CaptureHistoryController?
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -180,10 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = openCaptured(image: image,originalPNG: nil)
             editor.canvas.marks = [Mark(tool: .arrow,points: [NSPoint(x: 100,y: 200),NSPoint(x: 350,y: 340)],color: .systemRed,width: 4),Mark(tool: .rectangle,points: [NSPoint(x: 50,y: 360),NSPoint(x: 470,y: 430)],color: .systemBlue,width: 3)]
             editor.canvas.history = [[]]; editor.updateUndo(); _ = editor.flushArchive(); editor.showWindow(nil); editor.window?.title = exportCheck() + " " + keyboardCheck() + " " + historyCheck(); NSApp.activate(ignoringOtherApps: true)
-        } else { about() }
+        } else if !UserDefaults.standard.bool(forKey: "hasSeenWelcome") {
+            UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
+            welcomeController = WelcomeController(shortcut: captureShortcut) { [weak self] in self?.capture() }
+            welcomeController?.showWindow(nil); NSApp.activate(ignoringOtherApps: true)
+        }
     }
     @objc func about() {
-        alert("Shotlight", "Capture from the camera icon in your menu bar, or press \(captureShortcut.label). Change it in Settings. The desktop freezes immediately; drag to select an area on the frozen image. Escape cancels. Then annotate, copy, or save. Command–C copies the screenshot and closes its editor. Captures and annotations are retained automatically; reopen them from Recent Captures.\n\nIf capture is denied, allow Shotlight in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen the app.")
+        alert("Shotlight", "Capture from the camera icon in your menu bar, or press \(captureShortcut.label). Change it in Settings. The desktop freezes immediately; drag to select an area on the frozen image. Escape cancels. Then annotate, copy, or save. Command–C copies the screenshot. Settings controls whether copying closes the editor (on by default). Captures and annotations are retained automatically; reopen them from Recent Captures.\n\nIf capture is denied, allow Shotlight in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen the app.")
     }
     func alert(_ title: String, _ message: String) {
         NSApp.activate(ignoringOtherApps: true)
@@ -200,14 +144,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func showSettings() {
         if let settingsController, settingsController.window?.isVisible == true { settingsController.window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
-        settingsController = ShortcutSettingsController(shortcut: captureShortcut,historyLimit: captureStore?.limit ?? 50,clearHistory: { [weak self] in self?.clearHistory() }) { [weak self] shortcut,limit in
-            guard let self else { return "Shotlight is unavailable." }
-            guard self.flushEditors() else { return "A screenshot could not be retained. Try saving it before changing settings." }
+        settingsController = ShortcutSettingsController(shortcut: captureShortcut,historyLimit: captureStore?.limit ?? 50,closesAfterCopy: closesAfterCopy,captureCount: { [weak self] in self?.captureStore?.records.count ?? 0 },clearHistory: { [weak self] in self?.clearHistory() }) { [weak self] shortcut,limit,closes in
+            guard let self else { return .general("Shotlight is unavailable.") }
+            guard self.flushEditors() else { return .general("A screenshot could not be retained. Try saving it before changing settings.") }
             let oldShortcut = self.captureShortcut
-            if let error = self.registerShortcut(shortcut) { return error }
+            if let error = self.registerShortcut(shortcut) { return .shortcut(error) }
             do { try self.captureStore?.setLimit(limit) }
-            catch { _ = self.registerShortcut(oldShortcut); return error.localizedDescription }
-            shortcut.save(.standard); UserDefaults.standard.set(limit,forKey: "historyLimit"); return nil
+            catch { _ = self.registerShortcut(oldShortcut); return .history(error.localizedDescription) }
+            shortcut.save(.standard); UserDefaults.standard.set(limit,forKey: "historyLimit")
+            self.closesAfterCopy = closes; CopyPreference.save(closes, in: .standard)
+            self.editors.forEach { $0.closesAfterCopy = closes }; return nil
         }
         settingsController?.showWindow(nil); NSApp.activate(ignoringOtherApps: true)
     }
@@ -217,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         historyController?.reload(); historyController?.showWindow(nil); NSApp.activate(ignoringOtherApps: true)
     }
     func configureEditor(_ editor: EditorController) {
-        editors.append(editor)
+        editor.closesAfterCopy = closesAfterCopy; editors.append(editor)
         editor.onClose = { [weak self,weak editor] in self?.editors.removeAll { $0 === editor } }
         editor.navigate = { [weak self,weak editor] direction in
             guard let self,let editor,let id = editor.captureID,let store = self.captureStore,
@@ -314,7 +260,8 @@ final class Canvas: NSView, NSTextViewDelegate {
     var current: Mark?
     var tool: Tool = .arrow
     var color = NSColor.systemRed { didSet { if textEditor != nil { editingColor = color; refreshTextEditor() } } }
-    var strokeWidth: CGFloat = 4 { didSet { if textEditor != nil { editingWidth = strokeWidth; refreshTextEditor() } } }
+    var strokeWidth: CGFloat = 4
+    var fontSize: CGFloat = 24 { didSet { if textEditor != nil { editingWidth = fontSize/6; refreshTextEditor() } } }
     var changed: (() -> Void)?
     init(image: NSImage) { self.image = image; super.init(frame: NSRect(origin: .zero, size: image.size)); wantsLayer = true }
     required init?(coder: NSCoder) { fatalError() }
@@ -385,7 +332,8 @@ final class Canvas: NSView, NSTextViewDelegate {
         finishTextEditing()
         editingIndex = index
         let mark = index.map { marks[$0] }
-        editingColor = mark?.color ?? color; editingWidth = mark?.width ?? strokeWidth
+        editingColor = mark?.color ?? color; editingWidth = mark?.width ?? fontSize/6
+        if let mark { fontSize = max(16, mark.width*6) }
         if let mark { editingTop = NSPoint(x: mark.points[0].x, y: mark.points[0].y + textSize(mark.text, width: mark.width).height) }
         else { editingTop = point }
         let editor = InlineTextView(frame: .zero)
@@ -479,7 +427,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     var pendingSave: DispatchWorkItem?
     var lastArchiveError: String?
     var navigate: ((Int) -> Void)?
-    let scroll = NSScrollView()
+    let scroll = PreviewScrollView()
     var previousButton: NSMenuItem!
     var nextButton: NSMenuItem!
     var compactTools: [NSButton] = []
@@ -489,8 +437,15 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
     var undoButton: NSButton!
     var redoButton: NSButton!
-    init(image: NSImage,captureID: UUID? = nil,store: CaptureStore? = nil) {
-        canvas = Canvas(image: image); self.captureID = captureID; archive = store
+    var copyButton: CompactButton!
+    var sizeButton: CompactButton!
+    let zoomControls = NSSegmentedControl(labels: ["Fit", "100%"], trackingMode: .selectOne, target: nil, action: nil)
+    let zoomLabel = NSTextField(labelWithString: "100%")
+    var fittingPreview = true
+    var closesAfterCopy = true { didSet { updateCopyAction() } }
+    let copyPasteboard: NSPasteboard
+    init(image: NSImage,captureID: UUID? = nil,store: CaptureStore? = nil,pasteboard: NSPasteboard = .general) {
+        canvas = Canvas(image: image); self.captureID = captureID; archive = store; copyPasteboard = pasteboard
         let screen = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1200, height: 800)
         let size = NSSize(width: min(max(image.size.width+56,760),screen.width-80), height: min(max(image.size.height+120,360),screen.height-80))
         let window = ScreenshotWindow(contentRect: NSRect(origin: .zero,size: size), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
@@ -501,10 +456,12 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         let clip = CenteredClipView(); scroll.contentView = clip
         scroll.hasHorizontalScroller = true; scroll.hasVerticalScroller = true; scroll.scrollerStyle = .overlay
         scroll.documentView = canvas; scroll.drawsBackground = true; scroll.backgroundColor = .windowBackgroundColor
-        scroll.allowsMagnification = true; scroll.minMagnification = 0.25; scroll.maxMagnification = 2
-        scroll.automaticallyAdjustsContentInsets = false; scroll.contentInsets = NSEdgeInsets(top: 24,left: 24,bottom: 84,right: 24)
+        scroll.allowsMagnification = true; scroll.minMagnification = 0.01; scroll.maxMagnification = 2
+        scroll.manualZoom = { [weak self] in self?.fittingPreview = false }
+        scroll.zoomChanged = { [weak self] in self?.updateZoomControls() }
+        scroll.automaticallyAdjustsContentInsets = false
         scroll.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(scroll)
-        NSLayoutConstraint.activate([scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),scroll.topAnchor.constraint(equalTo: root.topAnchor),scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor)])
+
         let tools = NSStackView(); tools.spacing = 2
         for (index,symbol) in ["pencil","arrow.up.right","rectangle","textformat"].enumerated() {
             let button = ShotlightUI.icon(symbol,label: ["Pen","Arrow","Rectangle","Text — click to type or edit"][index],target: self,action: #selector(selectCompactTool(_:)))
@@ -514,14 +471,11 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         let color = NSColorWell(); color.color = .systemRed; color.colorWellStyle = .minimal; color.isBordered = false
         color.target = self; color.action = #selector(selectColor(_:)); color.toolTip = "Annotation color"; color.setAccessibilityLabel("Annotation color")
         color.translatesAutoresizingMaskIntoConstraints = false; NSLayoutConstraint.activate([color.widthAnchor.constraint(equalToConstant: 32),color.heightAnchor.constraint(equalToConstant: 32)])
-        let width = ShotlightUI.icon("lineweight",label: "Stroke & text size",target: self,action: #selector(showWidthMenu(_:)))
+        sizeButton = ShotlightUI.textButton("4 px", symbol: "lineweight", width: 76, target: self, action: #selector(showWidthMenu(_:)))
         widthMenu.autoenablesItems = false
-        for (index,label) in ["Thin","Medium","Thick"].enumerated() {
-            let item = NSMenuItem(title: label,action: #selector(selectCompactWidth(_:)),keyEquivalent: ""); item.target = self; item.tag = index; item.state = index == 1 ? .on : .off; widthMenu.addItem(item)
-        }
         undoButton = ShotlightUI.icon("arrow.uturn.backward",label: "Undo (⌘Z)",target: self,action: #selector(undo)); undoButton.keyEquivalent = "z"
         redoButton = ShotlightUI.icon("arrow.uturn.forward",label: "Redo (⇧⌘Z)",target: self,action: #selector(redo)); redoButton.keyEquivalent = "z"; redoButton.keyEquivalentModifierMask = [.command,.shift]
-        let copy = ShotlightUI.icon("doc.on.doc",label: "Copy & close (⌘C)",target: self,action: #selector(copyImage)); copy.primary = true
+        copyButton = ShotlightUI.textButton("Copy & Close", symbol: "doc.on.doc", width: 128, target: self, action: #selector(copyImage)); copyButton.primary = true
         let save = ShotlightUI.icon("square.and.arrow.down",label: "Save PNG (⌘S)",target: self,action: #selector(saveImage)); save.keyEquivalent = "s"
         let capture = ShotlightUI.icon("viewfinder",label: "New capture",target: self,action: #selector(newCapture))
         let more = ShotlightUI.icon("ellipsis",label: "More — history, zoom & settings",target: self,action: #selector(showMoreMenu(_:)))
@@ -533,26 +487,39 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         }
         moreMenu.addItem(.separator())
         let zoom = NSMenuItem(title: "Zoom",action: nil,keyEquivalent: ""); let zoomMenu = NSMenu(); zoom.submenu = zoomMenu
+        let fit = NSMenuItem(title: "Fit to Window", action: #selector(fitToWindow), keyEquivalent: ""); fit.target = self; fit.tag = 0; zoomMenu.addItem(fit)
         for percent in [25,50,75,100,150,200] { let item = NSMenuItem(title: "\(percent)%",action: #selector(selectZoom(_:)),keyEquivalent: ""); item.tag = percent; item.target = self; item.state = percent == 100 ? .on : .off; zoomMenu.addItem(item) }
         moreMenu.addItem(zoom)
         let settings = NSMenuItem(title: "Settings…",action: #selector(openSettings),keyEquivalent: ""); settings.target = self; moreMenu.addItem(settings)
-        let toolbar = NSStackView(views: [capture,ShotlightUI.divider(),tools,ShotlightUI.divider(),color,width,ShotlightUI.divider(),undoButton,redoButton,ShotlightUI.divider(),copy,save,more]); toolbar.spacing = 5; toolbar.alignment = .centerY
+        let toolbar = NSStackView(views: [capture,ShotlightUI.divider(),tools,ShotlightUI.divider(),color,sizeButton!,ShotlightUI.divider(),undoButton,redoButton,ShotlightUI.divider(),copyButton!,save,more]); toolbar.spacing = 5; toolbar.alignment = .centerY
         let surface = ShotlightUI.card(toolbar,padding: 7); surface.wantsLayer = true; surface.layer?.shadowOpacity = 0.14; surface.layer?.shadowRadius = 14; surface.layer?.shadowOffset = CGSize(width: 0,height: -3)
         surface.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(surface)
         NSLayoutConstraint.activate([surface.centerXAnchor.constraint(equalTo: root.centerXAnchor),surface.bottomAnchor.constraint(equalTo: root.bottomAnchor,constant: -12)])
-        captureLabel.font = .systemFont(ofSize: 12); captureLabel.textColor = .secondaryLabelColor; captureLabel.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(captureLabel)
-        NSLayoutConstraint.activate([captureLabel.centerXAnchor.constraint(equalTo: root.centerXAnchor),captureLabel.topAnchor.constraint(equalTo: root.topAnchor,constant: 12)])
-        window.minSize = NSSize(width: 680,height: 300)
-        connectCanvas(); updateUndo(); updateNavigation()
+        captureLabel.font = .systemFont(ofSize: 12); captureLabel.textColor = .secondaryLabelColor
+        captureLabel.lineBreakMode = .byTruncatingTail
+        captureLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        zoomControls.target = self; zoomControls.action = #selector(selectPreviewScale(_:)); zoomControls.setAccessibilityLabel("Preview scale")
+        zoomLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular); zoomLabel.textColor = .secondaryLabelColor
+        zoomLabel.widthAnchor.constraint(equalToConstant: 48).isActive = true
+        let header = NSStackView(views: [captureLabel, NSView(), zoomControls, zoomLabel]); header.spacing = 12
+        header.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(header)
+        NSLayoutConstraint.activate([
+            header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24), header.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -24), header.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+            scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor), scroll.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 12), scroll.bottomAnchor.constraint(equalTo: surface.topAnchor, constant: -12)
+        ])
+        window.contentMinSize = NSSize(width: 680,height: 300)
+        connectCanvas(); updateUndo(); updateNavigation(); updateSizeControl(); updateCopyAction()
+        root.layoutSubtreeIfNeeded(); fitToWindow()
     }
     required init?(coder: NSCoder) { fatalError() }
     func button(_ name: String, _ action: Selector) -> NSButton { let b = NSButton(title: name,target: self,action: action); b.bezelStyle = .rounded; b.keyEquivalentModifierMask = .command; return b }
     func connectCanvas() {
-        canvas.changed = { [weak self] in self?.updateUndo(); self?.scheduleArchiveSave() }
+        canvas.changed = { [weak self] in self?.updateUndo(); self?.updateSizeControl(); self?.scheduleArchiveSave() }
     }
     func scheduleArchiveSave() {
         pendingSave?.cancel()
         guard let id = captureID,archive?.contains(id) == true else { return }
+        captureLabel.stringValue = "Saving to Recent Captures…"
         let task = DispatchWorkItem { [weak self] in
             guard let self,let id = self.captureID,let archive = self.archive,archive.contains(id) else { return }
             do { try archive.save(id,marks: self.canvas.draftMarks(),undoHistory: self.canvas.draftUndoHistory(),redoHistory: self.canvas.draftRedoHistory()); self.lastArchiveError = nil; self.updateNavigation() }
@@ -575,15 +542,16 @@ final class EditorController: NSWindowController, NSWindowDelegate {
             previousButton?.isEnabled = false; nextButton?.isEnabled = false; captureLabel.stringValue = "Outside recent history — save or copy"; captureLabel.isHidden = false; return
         }
         previousButton?.isEnabled = index+1 < archive.records.count; nextButton?.isEnabled = index > 0
-        captureLabel.stringValue = "\(archive.records[index].displayDate) · retained"; captureLabel.isHidden = true
+        captureLabel.stringValue = lastArchiveError == nil ? "Saved to Recent Captures" : "Draft not retained — save or copy"
+        captureLabel.toolTip = lastArchiveError ?? archive.records[index].displayDate; captureLabel.isHidden = false
     }
     func loadCapture(_ id: UUID,store: CaptureStore) throws {
         let image = try store.image(id),marks = try store.marks(id),history = try store.undoHistory(id),undone = try store.redoHistory(id)
         canvas.finishTextEditing(); guard flushArchive() else { return }
         pendingSave?.cancel(); canvas.changed = nil
-        let tool = canvas.tool,color = canvas.color,width = canvas.strokeWidth
-        canvas = Canvas(image: image); canvas.marks = marks; canvas.history = history; canvas.undone = undone; canvas.tool = tool; canvas.color = color; canvas.strokeWidth = width
-        captureID = id; archive = store; scroll.documentView = canvas; connectCanvas(); updateUndo(); updateNavigation()
+        let tool = canvas.tool,color = canvas.color,width = canvas.strokeWidth,fontSize = canvas.fontSize
+        canvas = Canvas(image: image); canvas.marks = marks; canvas.history = history; canvas.undone = undone; canvas.tool = tool; canvas.color = color; canvas.strokeWidth = width; canvas.fontSize = fontSize
+        captureID = id; archive = store; scroll.documentView = canvas; connectCanvas(); updateUndo(); updateNavigation(); updateSizeControl(); fitToWindow()
         window?.title = "Shotlight — Annotate Screenshot"; window?.makeFirstResponder(canvas)
     }
     @objc func previousCapture() { navigate?(1) }
@@ -592,13 +560,27 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     func updateUndo() { undoButton.isEnabled = !canvas.history.isEmpty || canvas.textEditor != nil; redoButton.isEnabled = !canvas.undone.isEmpty; window?.isDocumentEdited = !canvas.marks.isEmpty }
     @objc func selectCompactTool(_ sender: NSButton) {
         canvas.finishTextEditing(); canvas.tool = Tool(rawValue: sender.tag) ?? .arrow
-        for button in compactTools { button.state = button === sender ? .on : .off }
+        for button in compactTools { button.state = button === sender ? .on : .off }; updateSizeControl()
     }
     @objc func selectColor(_ sender: NSColorWell) { canvas.color = sender.color }
-    @objc func showWidthMenu(_ sender: NSButton) { widthMenu.popUp(positioning: nil,at: NSPoint(x: 0,y: sender.bounds.maxY+6),in: sender) }
+    func updateSizeControl() {
+        let text = canvas.tool == .text
+        let selected = text ? max(16, canvas.textEditor == nil ? canvas.fontSize : canvas.editingWidth*6) : canvas.strokeWidth
+        let unit = text ? "pt" : "px"
+        sizeButton.title = "\(Int(selected.rounded())) \(unit)"
+        sizeButton.image = NSImage(systemSymbolName: text ? "textformat.size" : "lineweight", accessibilityDescription: nil)
+        sizeButton.toolTip = text ? "Text size" : "Stroke width"; sizeButton.setAccessibilityLabel("\(sizeButton.toolTip!): \(sizeButton.title)")
+        widthMenu.removeAllItems()
+        for value in text ? [16, 24, 48] : [2, 4, 8] {
+            let item = NSMenuItem(title: "\(value) \(unit)", action: #selector(selectCompactWidth(_:)), keyEquivalent: "")
+            item.target = self; item.tag = value; item.state = abs(selected-CGFloat(value)) < 0.01 ? .on : .off; widthMenu.addItem(item)
+        }
+    }
+    @objc func showWidthMenu(_ sender: NSButton) { updateSizeControl(); widthMenu.popUp(positioning: nil,at: NSPoint(x: 0,y: sender.bounds.maxY+6),in: sender) }
     @objc func selectCompactWidth(_ sender: NSMenuItem) {
-        canvas.strokeWidth = [CGFloat(2),4,8][sender.tag]
-        for item in widthMenu.items { item.state = item === sender ? .on : .off }
+        if canvas.tool == .text { canvas.fontSize = CGFloat(sender.tag) }
+        else { canvas.strokeWidth = CGFloat(sender.tag) }
+        updateSizeControl()
     }
     @objc func showMoreMenu(_ sender: NSButton) {
         let rep = canvas.image.representations.first
@@ -606,22 +588,51 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         updateNavigation(); moreMenu.popUp(positioning: nil,at: NSPoint(x: 0,y: sender.bounds.maxY+6),in: sender)
     }
     @objc func selectZoom(_ sender: NSMenuItem) {
-        scroll.setMagnification(CGFloat(sender.tag)/100,centeredAt: NSPoint(x: canvas.bounds.midX,y: canvas.bounds.midY))
-        for item in sender.menu?.items ?? [] { item.state = item === sender ? .on : .off }
+        fittingPreview = false
+        scroll.setMagnification(CGFloat(sender.tag)/100, centeredAt: NSPoint(x: canvas.bounds.midX, y: canvas.bounds.midY)); updateZoomControls()
+    }
+    @objc func selectPreviewScale(_ sender: NSSegmentedControl) {
+        if sender.selectedSegment == 0 { fitToWindow() }
+        else {
+            fittingPreview = false
+            scroll.setMagnification(1, centeredAt: NSPoint(x: canvas.bounds.midX, y: canvas.bounds.midY)); updateZoomControls()
+        }
+    }
+    @objc func fitToWindow() {
+        fittingPreview = true; window?.contentView?.layoutSubtreeIfNeeded()
+        let available = scroll.contentSize
+        let factor = min(1, max(1, available.width-48)/canvas.bounds.width, max(1, available.height-48)/canvas.bounds.height)
+        scroll.setMagnification(max(scroll.minMagnification, factor), centeredAt: NSPoint(x: canvas.bounds.midX, y: canvas.bounds.midY))
+        updateZoomControls()
+    }
+    func updateZoomControls() {
+        let percent = Int((scroll.magnification*100).rounded()); zoomLabel.stringValue = "\(percent)%"
+        zoomControls.selectedSegment = fittingPreview ? 0 : abs(scroll.magnification-1) < 0.001 ? 1 : -1
+        if let menu = moreMenu.items.first(where: { $0.title == "Zoom" })?.submenu {
+            for item in menu.items { item.state = item.tag == 0 ? (fittingPreview ? .on : .off) : (!fittingPreview && abs(scroll.magnification-CGFloat(item.tag)/100) < 0.001 ? .on : .off) }
+        }
+    }
+    func windowDidResize(_ notification: Notification) { if fittingPreview { fitToWindow() } }
+    func updateCopyAction() {
+        guard let copyButton else { return }
+        copyButton.title = closesAfterCopy ? "Copy & Close" : "Copy"
+        copyButton.attributedTitle = NSAttributedString(string: copyButton.title, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: NSColor.white])
+        copyButton.toolTip = "\(copyButton.title) (⌘C)"; copyButton.setAccessibilityLabel(copyButton.toolTip!)
     }
     @objc func openSettings() { (NSApp.delegate as? AppDelegate)?.showSettings() }
     @objc func newCapture() { (NSApp.delegate as? AppDelegate)?.capture() }
     @objc func undo() { canvas.undoMark() }
     @objc func redo() { canvas.redoMark() }
     func failure(_ message: String) { let alert = NSAlert(); alert.messageText = "Could not export screenshot"; alert.informativeText = message; alert.runModal() }
-    @objc func copyImage() { _ = copyAndDismiss(to: .general) }
-    @discardableResult func copyAndDismiss(to pasteboard: NSPasteboard) -> Bool {
+    @objc func copyImage() { _ = copy(to: copyPasteboard) }
+    @discardableResult func copy(to pasteboard: NSPasteboard) -> Bool {
         guard let data = canvas.png() else { failure("The PNG could not be rendered."); return false }
         guard flushArchive() else { return false }
         pasteboard.clearContents()
         guard pasteboard.setData(data,forType: .png) else { failure("The clipboard could not be updated."); return false }
         window?.isDocumentEdited = false
-        window?.close()
+        if closesAfterCopy { window?.close() }
+        else { captureLabel.stringValue = "Copied · " + (captureID.flatMap { archive?.contains($0) } == true ? "Saved to Recent Captures" : "Keep this editor open to retain your draft") }
         return true
     }
     @objc func saveImage() {
@@ -702,7 +713,7 @@ func keyboardCheck() -> String {
     var copied = false, closed = false
     editor.onClose = { closed = true }
     (editor.window as! ScreenshotWindow).copyScreenshot = {
-        copied = editor.copyAndDismiss(to: pasteboard)
+        copied = editor.copy(to: pasteboard)
     }
     guard editor.window!.performKeyEquivalent(with: copy), copied, closed, editor.canvas.textEditor == nil, editor.canvas.marks.last?.text == "Copy this draft", pasteboard.data(forType: .png) != nil else { return "FAIL: copy and dismiss while typing" }
     pasteboard.releaseGlobally()
@@ -711,7 +722,7 @@ func keyboardCheck() -> String {
 
 let app = NSApplication.shared
 if CommandLine.arguments.contains("--run-checks") {
-    let result = exportCheck() + " " + keyboardCheck() + " " + historyCheck() + " " + frozenCaptureCheck() + " " + compactToolbarCheck()
+    let result = exportCheck() + " " + keyboardCheck() + " " + historyCheck() + " " + frozenCaptureCheck() + " " + compactToolbarCheck() + " " + interfaceBehaviorCheck()
     print(result)
     exit(result.contains("FAIL:") ? 1 : 0)
 }
