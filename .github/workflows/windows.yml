@@ -1,0 +1,59 @@
+name: Windows build and checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Core regression checks
+        run: dotnet run --project windows/Shotlight.Core.Checks -c Release
+      - name: Publish Windows x64 app
+        run: dotnet publish windows/Shotlight/Shotlight.csproj -c Release -r win-x64 --self-contained true -o windows/artifacts/win-x64
+      - name: Windows generated-image checks
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'windows/artifacts/win-x64/Shotlight.exe').Path
+          $report = Join-Path $env:RUNNER_TEMP 'Shotlight-checks.txt'
+          $process = Start-Process -FilePath $exe -ArgumentList @('--run-checks', '--report', ('"' + $report + '"')) -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            $process.Kill()
+            throw 'Windows checks timed out'
+          }
+          if (Test-Path $report) { Get-Content $report }
+          if ($process.ExitCode -ne 0) { throw "Windows checks failed: $($process.ExitCode)" }
+          if (-not (Test-Path $report)) { throw 'Windows checks did not produce a report' }
+      - name: Include user instructions
+        shell: pwsh
+        run: |
+          Copy-Item windows/README.txt windows/artifacts/win-x64/
+          Copy-Item windows/Run-Checks.cmd windows/artifacts/win-x64/
+          Remove-Item windows/artifacts/win-x64/*.pdb -ErrorAction SilentlyContinue
+      - name: Upload Windows app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shotlight-Windows-x64
+          path: windows/artifacts/win-x64/
+          if-no-files-found: error
+      - name: Upload Windows check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-check-report
+          path: ${{ runner.temp }}/Shotlight-checks.txt
+          if-no-files-found: warn

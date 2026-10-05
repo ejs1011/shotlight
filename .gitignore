@@ -1,0 +1,17 @@
+.DS_Store
+Thumbs.db
+Desktop.ini
+**/.build/
+**/bin/
+**/obj/
+**/artifacts/
+**/.vs/
+*.app/
+*.exe
+*.dll
+*.pdb
+*.zip
+Shotlight-checks.txt
+.env
+.env.*
+!.env.example
