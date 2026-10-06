@@ -84,6 +84,7 @@ internal sealed class EditorWindow : Wpf.Window
         toolbar.Children.Add(Ui.Divider());
         copyButton = Ui.Button("Copy & Close",() => Copy(),"Copy","PrimaryButton"); toolbar.Children.Add(copyButton);
         toolbar.Children.Add(Ui.Button("",Save,"Save","QuietButton","Save PNG · Ctrl+S"));
+        toolbar.Children.Add(Ui.Button("",() => owner.DeleteCapture(CaptureId,this),"Trash","QuietButton","Delete capture from Recent Captures"));
         var more = Ui.Menu();
         var info = new Controls.MenuItem { IsEnabled = false };
         info.SetBinding(Controls.HeaderedItemsControl.HeaderProperty,new System.Windows.Data.Binding("Text") { Source = dimensions }); more.Items.Add(info);
@@ -242,6 +243,13 @@ internal sealed class EditorWindow : Wpf.Window
         if (!Flush()) { e.Cancel = true; return; }
         if (!store.Contains(CaptureId) && !exported)
             e.Cancel = Wpf.MessageBox.Show(this,"This screenshot is outside recent history. Close and discard it without saving or copying?","Close screenshot?",Wpf.MessageBoxButton.YesNo,Wpf.MessageBoxImage.Question) != Wpf.MessageBoxResult.Yes;
+    }
+    internal void PauseAutosave() => autosave.Stop();
+    internal void ResumeAutosave() { if (store.Contains(CaptureId)) autosave.Start(); }
+    internal void CloseAfterDelete()
+    {
+        permitClose = true; autosave.Stop(); Canvas.Changed -= OnChanged;
+        Canvas.FinishText(cancel: true); Close();
     }
     public void CloseAfterClear() { permitClose = true; Close(); }
     public void CloseAfterQuit() { permitClose = true; Close(); }

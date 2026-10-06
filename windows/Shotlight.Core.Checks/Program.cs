@@ -92,6 +92,25 @@ try
         store.Clear(path => Directory.Move(path,recycle)); Require(store.Records.Count == 0 && Directory.Exists(directory) && Directory.GetDirectories(recycle).Length == 1,"Clear failed to preserve the recycled originals.");
         store.Add(png,png,1,1); Require(store.Records.Count == 1,"Capture failed after clearing.");
     });
+    Check("deleting one capture recycles all its files and preserves other drafts after restart",() =>
+    {
+        string directory = Path.Combine(root,"delete"); var store = new CaptureStore(directory);
+        var first = store.Add(png,png,1,1); var target = store.Add(png,png,1,1); var last = store.Add(png,png,1,1);
+        var document = new AnnotationDocument(); document.Add(Text("Retained annotation")); store.Save(first.Id,document.Snapshot());
+        string recycle = Path.Combine(root,"single-recycled"); int changes = 0; store.Changed += () => changes++;
+        store.Delete(target.Id,path => Directory.Move(path,recycle));
+        Require(changes == 1 && !store.Contains(target.Id) && File.ReadAllBytes(Path.Combine(recycle,"original.png")).SequenceEqual(png) && File.Exists(Path.Combine(recycle,"thumbnail.png")) && File.Exists(Path.Combine(recycle,"draft.json")),"Deletion did not recycle the complete target draft.");
+        var restarted = new CaptureStore(directory);
+        Require(restarted.Records.Count == 2 && restarted.Contains(first.Id) && restarted.Contains(last.Id) && restarted.Get(first.Id).Marks.Single().Text == "Retained annotation","Deletion changed another capture or returned after restart.");
+        Reject(() => store.Save(target.Id,document.Snapshot())); Require(!Directory.Exists(Path.Combine(directory,target.Id.ToString())),"Saving a deleted capture recreated it.");
+    });
+    Check("failed or incomplete capture deletion preserves history and sends no change notification",() =>
+    {
+        var store = new CaptureStore(Path.Combine(root,"delete-failure")); var target = store.Add(png,png,1,1); int changes = 0; store.Changed += () => changes++;
+        Reject(() => store.Delete(target.Id,_ => throw new IOException("Injected delete failure")));
+        Reject(() => store.Delete(target.Id,_ => { }));
+        Require(changes == 0 && store.Contains(target.Id) && store.Original(target.Id).SequenceEqual(png) && new CaptureStore(store.Root).Contains(target.Id),"Failed deletion lost its record or original pixels.");
+    });
     Check("settings retain the shortcut and history limit",() =>
     {
         string path = Path.Combine(root,"settings.json"); var settings = new UserSettings { Shortcut = new(0x4B,0x0002|0x0004,"K"), HistoryLimit = 80 };

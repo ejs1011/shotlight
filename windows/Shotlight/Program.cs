@@ -10,6 +10,8 @@ internal static class Program
     {
         System.Windows.Forms.Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         System.Windows.Forms.Application.EnableVisualStyles();
+        // Modeless WinForms selectors need command-key preprocessing in WPF's loop.
+        System.Windows.Forms.Integration.WindowsFormsHost.EnableWindowsFormsInterop();
         if (args.Contains("--run-checks")) return WindowsChecks.Run(args);
         int previewFlag = Array.IndexOf(args,"--render-previews");
         if (previewFlag >= 0) return previewFlag+1 < args.Length ? UiPreview.Run(args[previewFlag+1]) : 1;
@@ -39,9 +41,13 @@ internal sealed class AppController : IDisposable
     private HistoryWindow? history;
     private SettingsWindow? settingsWindow;
     private bool disposed;
-    public AppController(Wpf.Application app, string? testRoot = null)
+    private readonly Action<string> recycleCapture;
+    internal Func<Guid,bool>? ConfirmCaptureDeletion { get; set; }
+    internal Action<Exception> ReportDeleteError { get; set; } = error => Ui.Error("Could not delete capture",error);
+    public AppController(Wpf.Application app, string? testRoot = null, Action<string>? recycleCapture = null)
     {
         this.app = app;
+        this.recycleCapture = recycleCapture ?? (path => Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(path,Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin,Microsoft.VisualBasic.FileIO.UICancelOption.ThrowException));
         string root = testRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Shotlight");
         settingsPath = Path.Combine(root,"settings.json");
         try { settings = UserSettings.Load(settingsPath); }
@@ -129,10 +135,32 @@ internal sealed class AppController : IDisposable
     {
         if (history is null)
         {
-            history = new HistoryWindow(store,id => { try { Open(id); } catch (Exception error) { Ui.Error("Could not reopen screenshot",error); } });
+            history = new HistoryWindow(store,id => { try { Open(id); } catch (Exception error) { Ui.Error("Could not reopen screenshot",error); } },id => DeleteCapture(id,history));
             history.Closed += (_,_) => history = null; history.Show();
         }
         history.Reload(); if (history.WindowState == Wpf.WindowState.Minimized) history.WindowState = Wpf.WindowState.Normal; history.Activate();
+    }
+    internal bool DeleteCapture(Guid id, Wpf.Window? source = null)
+    {
+        bool retained = store.Contains(id);
+        string message = retained
+            ? "Delete this capture from Recent Captures and close its editor?\n\nThe retained capture will move to the Recycle Bin. Any PNG files you've saved will stay in place."
+            : "Discard this capture and close its editor?\n\nThis capture is outside Recent Captures. Any PNG files you've saved will stay in place.";
+        if (!(ConfirmCaptureDeletion?.Invoke(id) ?? Wpf.MessageBox.Show(source,message,"Delete capture?",Wpf.MessageBoxButton.YesNo,Wpf.MessageBoxImage.Question,Wpf.MessageBoxResult.No) == Wpf.MessageBoxResult.Yes)) return false;
+        var targets = editors.Where(editor => editor.CaptureId == id).ToArray();
+        // Shell recycling may pump messages. Stop pending autosaves before moving files.
+        foreach (var editor in targets) editor.PauseAutosave();
+        try
+        {
+            if (store.Contains(id)) store.Delete(id,recycleCapture);
+            foreach (var editor in targets) editor.CloseAfterDelete();
+            return true;
+        }
+        catch (Exception error)
+        {
+            foreach (var editor in targets) editor.ResumeAutosave();
+            ReportDeleteError(error); return false;
+        }
     }
     public void ShowSettings()
     {

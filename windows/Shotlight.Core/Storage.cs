@@ -125,6 +125,13 @@ public sealed class CaptureStore
         int previous = Limit; Limit = Math.Clamp(limit, 1, 500);
         try { Trim(); } catch { Limit = previous; throw; } finally { Changed?.Invoke(); }
     }
+    public void Delete(Guid id, Action<string> removeDirectory)
+    {
+        _ = Get(id); string folder = Folder(id);
+        removeDirectory(folder);
+        if (Directory.Exists(folder)) throw new IOException("The capture could not be removed from recent history.");
+        Records.RemoveAll(record => record.Id == id); Changed?.Invoke();
+    }
     public void Clear(Action<string> removeDirectory)
     {
         removeDirectory(Root); Directory.CreateDirectory(Root); Records.Clear(); Changed?.Invoke();

@@ -8,6 +8,9 @@ namespace Shotlight;
 
 internal static class WindowsChecks
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
     // These Windows-only checks use generated images and an injected clipboard
     // writer. They do not capture the desktop, touch normal history, or replace
     // the user's clipboard. The desktop/tray integration still needs a real PC.
@@ -24,7 +27,13 @@ internal static class WindowsChecks
         }
         try
         {
-            using var owner = new AppController(app,root);
+            bool failRecycling = false;
+            using var owner = new AppController(app,root,path =>
+            {
+                if (failRecycling) throw new IOException("Injected recycle failure");
+                string recycle = Path.Combine(root,"Recycled"); Directory.CreateDirectory(recycle);
+                Directory.Move(path,Path.Combine(recycle,Path.GetFileName(path)));
+            });
             using var source = new Bitmap(400,240);
             for (int y = 0; y < source.Height; y++) for (int x = 0; x < source.Width; x++) source.SetPixel(x,y,Color.FromArgb(255,x%256,y%256,60));
             Check("reverse frozen selection crops original pixels without decorations",() =>
@@ -45,6 +54,27 @@ internal static class WindowsChecks
                 using var selector = new SelectionForm(new Bitmap(source),new Rectangle(0,0,400,240)); int captures = 0, cancelled = 0;
                 selector.Selected += image => { captures++; image.Dispose(); }; selector.Cancelled += () => cancelled++;
                 selector.DragForCheck(new Point(20,20),new Point(20,20)); selector.CancelForCheck(); Require(captures == 0 && cancelled == 1,"Empty selection or cancellation generated a screenshot.");
+            });
+            Check("Escape reaches the selector through the WPF message loop before and during a drag",() =>
+            {
+                foreach (bool dragging in new[] { false,true })
+                {
+                    using var selector = new SelectionForm(new Bitmap(source),new Rectangle(0,0,400,240));
+                    int captures = 0, cancelled = 0; int retained = owner.TestStore.Records.Count;
+                    selector.Selected += image => { captures++; image.Dispose(); };
+                    selector.Cancelled += () => { cancelled++; selector.Hide(); };
+                    selector.Show();
+                    if (dragging)
+                    {
+                        Require(PostMessage(selector.Handle,0x0201,new IntPtr(1),new IntPtr(20 | (20 << 16))),"Could not post drag start.");
+                        Require(PostMessage(selector.Handle,0x0200,new IntPtr(1),new IntPtr(80 | (80 << 16))),"Could not post drag movement.");
+                    }
+                    Require(PostMessage(selector.Handle,0x0100,new IntPtr((int)Keys.Escape),new IntPtr(1)),"Could not post Escape.");
+                    app.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                    Require(cancelled == 1 && !selector.Visible && !selector.Capture,"Escape did not dismiss the selector and release the drag through the WPF message loop.");
+                    selector.CancelForCheck(); selector.DragForCheck(new Point(20,20),new Point(80,80));
+                    Require(cancelled == 1 && captures == 0 && owner.TestStore.Records.Count == retained,"A repeated cancel or delayed mouse release produced a capture.");
+                }
             });
             Check("PNG export retains physical pixel dimensions and annotations",() =>
             {
@@ -213,10 +243,71 @@ internal static class WindowsChecks
                 editor.Canvas.Undo(); Require(editor.Flush(),"Undo did not save.");
                 using (var thumb = ImageFiles.Read(store.Thumbnail(id))) Require(thumb.GetPixel(12,27).R < 100,"Undo left a stale annotation preview.");
                 editor.Canvas.Redo(); store.Save(id,editor.Canvas.DraftSnapshot()); Require(!store.ThumbnailIsCurrent(id),"Old cache was not invalidated.");
-                var history = new HistoryWindow(store,_ => { });
+                var history = new HistoryWindow(store,_ => { },_ => false);
                 Require(store.ThumbnailIsCurrent(id) && store.Original(id).SequenceEqual(original),"Older cache upgrade changed original pixels.");
                 using (var thumb = ImageFiles.Read(store.Thumbnail(id))) Require(thumb.GetPixel(12,27).R > 230,"Older cache upgrade omitted annotations.");
                 history.Close(); editor.Close();
+            });
+            Check("editor deletion closes a typing capture and removes only its retained draft",() =>
+            {
+                var keep = owner.OpenNew(source); var editor = owner.OpenNew(source); Guid id = editor.CaptureId;
+                string savedPng = Path.Combine(root,"saved-export.png"); byte[] savedPixels = ImageFiles.Png(source); File.WriteAllBytes(savedPng,savedPixels);
+                editor.Canvas.BeginText(new(30,30)); editor.Canvas.Children.OfType<Controls.TextBox>().Single().Text = "Discard this typing";
+                var content = (Controls.Grid)editor.Content;
+                var toolbar = content.Children.OfType<Controls.Border>().Single();
+                var remove = ((Controls.StackPanel)toolbar.Child).Children.OfType<Controls.Button>().Single(button => Equals(button.ToolTip,"Delete capture from Recent Captures"));
+                owner.ConfirmCaptureDeletion = _ => false; remove.RaiseEvent(new Wpf.RoutedEventArgs(Controls.Button.ClickEvent));
+                Require(editor.IsVisible && editor.Canvas.IsEditing && owner.TestStore.Contains(id),"Cancelling delete changed the capture.");
+                owner.ConfirmCaptureDeletion = _ => true; remove.RaiseEvent(new Wpf.RoutedEventArgs(Controls.Button.ClickEvent));
+                editor.Dispatcher.Invoke(() => { },System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                Require(!editor.IsVisible && !editor.Canvas.IsEditing && !owner.TestStore.Contains(id) && keep.IsVisible && owner.TestStore.Contains(keep.CaptureId),"Delete did not close only the target editor and remove its draft.");
+                Require(!Directory.Exists(Path.Combine(owner.TestStore.Root,id.ToString())) && Directory.Exists(Path.Combine(root,"Recycled",id.ToString())),"Delete did not recycle the target files.");
+                Require(!new CaptureStore(owner.TestStore.Root).Contains(id),"A deleted capture returned after restart.");
+                Require(File.ReadAllBytes(savedPng).SequenceEqual(savedPixels),"Deletion changed a separately saved PNG."); keep.Close();
+            });
+            Check("recent capture deletion supports cancellation, closes an open editor and refreshes the list",() =>
+            {
+                static IEnumerable<Wpf.DependencyObject> Descendants(Wpf.DependencyObject root)
+                {
+                    yield return root;
+                    foreach (var child in Wpf.LogicalTreeHelper.GetChildren(root).OfType<Wpf.DependencyObject>())
+                        foreach (var nested in Descendants(child)) yield return nested;
+                }
+                var editor = owner.OpenNew(source); Guid id = editor.CaptureId; editor.Canvas.BeginText(new(20,20));
+                editor.Canvas.Children.OfType<Controls.TextBox>().Single().Text = "Pending recent edit";
+                var history = new HistoryWindow(owner.TestStore,_ => { },capture => owner.DeleteCapture(capture)); history.Show();
+                var remove = Descendants(history).OfType<Controls.Button>().Single(button => Equals(button.Tag,id));
+                int count = owner.TestStore.Records.Count;
+                owner.ConfirmCaptureDeletion = _ => false; remove.RaiseEvent(new Wpf.RoutedEventArgs(Controls.Button.ClickEvent));
+                Require(owner.TestStore.Records.Count == count && editor.IsVisible,"Cancelled recent deletion removed a draft or closed its editor.");
+                owner.ConfirmCaptureDeletion = _ => true; remove.RaiseEvent(new Wpf.RoutedEventArgs(Controls.Button.ClickEvent)); history.UpdateLayout();
+                Require(!editor.IsVisible && owner.TestStore.Records.Count == count-1 && !Descendants(history).OfType<Controls.Button>().Any(button => Equals(button.Tag,id)),"Recent deletion left its card or an open editor behind.");
+                Require(!new CaptureStore(owner.TestStore.Root).Contains(id),"Recent deletion did not survive restart."); history.Close();
+            });
+            Check("failed deletion retains the capture and resumes active-text autosave",() =>
+            {
+                var editor = owner.OpenNew(source); Guid id = editor.CaptureId; editor.Canvas.BeginText(new(20,20));
+                var box = editor.Canvas.Children.OfType<Controls.TextBox>().Single(); box.Text = "Keep this typing";
+                Exception? failure = null; owner.ConfirmCaptureDeletion = _ => true; owner.ReportDeleteError = error => failure = error;
+                failRecycling = true;
+                try { Require(!owner.DeleteCapture(id),"A failed recycle reported success."); }
+                finally { failRecycling = false; }
+                Require(failure is IOException && editor.IsVisible && editor.Canvas.IsEditing && owner.TestStore.Contains(id),"Failed deletion closed the editor or lost its active text.");
+                var frame = new System.Windows.Threading.DispatcherFrame();
+                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+                timer.Tick += (_,_) => { timer.Stop(); frame.Continue = false; }; timer.Start(); System.Windows.Threading.Dispatcher.PushFrame(frame);
+                Require(new CaptureStore(owner.TestStore.Root).Get(id).Marks.Single().Text == "Keep this typing","Autosave did not resume after failed deletion."); editor.Close();
+            });
+            Check("delete discards an open capture outside recent history without removing another draft",() =>
+            {
+                var editor = owner.OpenNew(source); var latest = owner.OpenNew(source); int limit = owner.TestStore.Limit;
+                try
+                {
+                    owner.TestStore.SetLimit(1); Require(!owner.TestStore.Contains(editor.CaptureId),"Could not isolate an evicted capture.");
+                    editor.Canvas.BeginText(new(20,20)); owner.ConfirmCaptureDeletion = _ => true;
+                    Require(owner.DeleteCapture(editor.CaptureId) && !editor.IsVisible && latest.IsVisible && owner.TestStore.Contains(latest.CaptureId),"Discarding an evicted capture affected the retained draft.");
+                }
+                finally { owner.TestStore.SetLimit(limit); editor.CloseAfterQuit(); latest.Close(); }
             });
             Check("settings show inline errors and actual retention counts and respect cancellation",() =>
             {

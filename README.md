@@ -23,6 +23,7 @@ The current sources are **Mac 0.7** and **Windows 1.2**, with the UI changes des
 - **Command+C** on Mac or **Ctrl+C** on Windows copies the annotated screenshot and closes its editor by default. Settings on either platform can keep the editor open after copying; the button label changes to **Copy**.
 - Save PNGs at the original pixel resolution.
 - Automatically retain recent captures, editable annotations, and undo/redo across restarts. Keep 50 by default, configurable from 1 to 500. Thumbnails include annotations, and settings confirm reductions that remove older drafts.
+- On Windows, delete individual captures from the editor or Recent Captures. Deleted captures move to the Recycle Bin.
 - No upload service, account, or analytics.
 
 Detailed controls and storage locations: [macOS guide](macos/README.txt) · [Windows guide](windows/README.txt).
