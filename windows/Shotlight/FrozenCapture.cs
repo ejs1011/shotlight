@@ -46,6 +46,7 @@ internal sealed class SelectionForm : Form
     private readonly Bitmap frozen;
     private Point? anchor;
     private PixelRect? selection;
+    private bool finished;
     private readonly Rectangle screenBounds;
     public event Action<Bitmap>? Selected;
     public event Action? Cancelled;
@@ -58,30 +59,36 @@ internal sealed class SelectionForm : Form
         Text = "Shotlight — Frozen Capture"; AccessibleName = "Frozen screenshot. Drag to select an area. Escape cancels.";
     }
     protected override void OnShown(EventArgs e) { base.OnShown(e); Bounds = screenBounds; }
-    protected override void OnFormClosing(FormClosingEventArgs e) { base.OnFormClosing(e); Cancelled?.Invoke(); }
+    protected override void OnFormClosing(FormClosingEventArgs e) { base.OnFormClosing(e); CancelSelection(); }
+    private void CancelSelection()
+    {
+        if (finished) return;
+        finished = true; anchor = null; selection = null; Capture = false;
+        Cancelled?.Invoke();
+    }
     protected override bool ProcessCmdKey(ref Message message, Keys keys)
     {
-        if (keys == Keys.Escape) { Cancelled?.Invoke(); return true; }
+        if ((keys & Keys.KeyCode) == Keys.Escape) { CancelSelection(); return true; }
         return base.ProcessCmdKey(ref message, keys);
     }
     protected override void OnMouseDown(MouseEventArgs e)
     {
-        base.OnMouseDown(e); if (e.Button != MouseButtons.Left) return;
+        base.OnMouseDown(e); if (finished || e.Button != MouseButtons.Left) return;
         Activate(); anchor = e.Location; selection = null; Capture = true; Invalidate();
     }
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        base.OnMouseMove(e); if (anchor is not Point a) return;
+        base.OnMouseMove(e); if (finished || anchor is not Point a) return;
         selection = PixelRect.Between(new(a.X,a.Y), new(e.X,e.Y), frozen.Width, frozen.Height); Invalidate();
     }
     protected override void OnMouseUp(MouseEventArgs e)
     {
-        base.OnMouseUp(e); if (e.Button != MouseButtons.Left || anchor is not Point a) return;
+        base.OnMouseUp(e); if (finished || e.Button != MouseButtons.Left || anchor is not Point a) return;
         anchor = null; Capture = false;
         var rect = PixelRect.Between(new(a.X,a.Y), new(e.X,e.Y), frozen.Width, frozen.Height);
         if (!rect.IsCapture) { selection = null; Invalidate(); return; }
         // Crop the existing bitmap, never the live desktop or the decorated view.
-        Selected?.Invoke(Crop(frozen, rect));
+        finished = true; Selected?.Invoke(Crop(frozen, rect));
     }
     internal static Bitmap Crop(Bitmap frozen, PixelRect rect) => frozen.Clone(new Rectangle(rect.X,rect.Y,rect.Width,rect.Height), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
     internal void DragForCheck(Point from, Point to)

@@ -36,7 +36,7 @@ internal static class UiPreview
             editor.Close();
             for (int i = 0; i < 5; i++)
                 owner.TestStore.Add(ImageFiles.Png(sample),ImageFiles.Thumbnail(sample),sample.Width,sample.Height,DateTimeOffset.Now.AddHours(-i-1));
-            var history = new HistoryWindow(owner.TestStore,_ => { }); history.Show(); Render(history,directory,"recent-captures",840,680); history.Close();
+            var history = new HistoryWindow(owner.TestStore,_ => { },_ => false); history.Show(); Render(history,directory,"recent-captures",840,680); Render(history,directory,"recent-captures-compact",580,680); history.Close();
             var settings = new SettingsWindow(new UserSettings(),_ => null,() => { },() => owner.TestStore.Records.Count); settings.Show(); Render(settings,directory,"settings",550,null);
             settings.LimitField.Text = "2"; settings.BodyScroll.ScrollToEnd(); Render(settings,directory,"settings-retention",550,null);
             settings.Height = 480; settings.UpdateLayout(); settings.LimitField.Text = "0"; settings.SaveChanges(); Render(settings,directory,"settings-validation",550,480); settings.Close();

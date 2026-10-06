@@ -61,7 +61,8 @@ The initial Mac app passed its AppKit checks on an Apple silicon Mac. The initia
 Before relying on a new build, test the applicable platform manually:
 
 - Activate capture while a clock, video, or animation is moving. Confirm the screen stays frozen during selection.
-- Capture on every connected monitor, including monitors with different scaling settings. Drag in both directions; cancel with Escape.
+- Capture on every connected monitor, including monitors with different scaling settings. Drag in both directions; cancel with Escape before clicking and during a drag, then start another capture. On Windows, check both the global shortcut and the tray command.
+- On Windows, use the editor trash button and Delete on a Recent Captures card. Cancel the confirmation once, then confirm deletion with active text. Check that only the chosen draft disappears, its editor closes, it stays absent after restart, and saved PNGs remain. Confirm the retained capture can be found in the Recycle Bin.
 - Draw each annotation type, type multiple lines inline, edit existing text, and undo/redo.
 - Copy while typing with Close editor after copying both enabled and disabled. Confirm text commits, the button label matches the setting, and the full annotated image pastes correctly into another app.
 - Save a PNG and check the selected area's physical pixel dimensions.
@@ -84,7 +85,9 @@ To render them locally on Windows, launch `Shotlight.exe --render-previews PATH_
 
 Both platforms use a compact floating toolbar. History, previous/next navigation, additional zoom levels, and settings are accessed from its More menu. Both expose Fit/100%, a zoom percentage, contextual stroke/font sizes, and a labeled Copy/Copy & Close action. Copy closes by default; the saved preference on either platform applies to both button and Command-C / Ctrl+C, including already-open editors. Regression checks exercise both copy modes with an isolated clipboard, compact fitting and original-resolution export, live/legacy annotated thumbnails, inline validation, and retention confirmation/cancellation. The Mac interface uses native symbols and follows system light/dark appearance.
 
-Windows renders also include the keep-open Copy mode, a short settings window with an inline retention error, and the one-time welcome.
+Windows renders also include the keep-open Copy mode, a short settings window with an inline retention error, and the one-time welcome. The editor includes a trash action, and every Recent Captures card has a Delete button.
+
+The Windows entry point enables modeless WinForms keyboard processing in the WPF message loop. Escape checks post real keyboard messages to a generated selector before and during a drag; a direct call to the command handler does not verify this integration. Single-capture deletion uses an injected recycle operation in checks, closes that capture's editor without flushing discarded text, and stops autosave before recycling. Failure checks preserve the record and verify that active-text autosave resumes. These checks do not access personal history or the real Recycle Bin.
 
 Windows inline text grows inward at the screenshot's right and bottom edges, retaining that position in the draft and export. Its height includes trailing blank lines so Shift+Enter keeps preceding rows visible. Generated-image checks cover edge typing at several preview scales, font-size changes, multiline caret visibility, commit/reopen/cancel, and retained positions. The `editor-inline-edge` preview shows multiple rows being edited at the bottom-right corner.
 

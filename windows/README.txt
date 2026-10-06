@@ -9,6 +9,8 @@ The toolbar shows independent stroke widths in px and text sizes in pt.
 Copy is labeled Copy & Close by default; Settings can keep the editor open
 instead. Both Ctrl+C and the button honor the saved preference immediately.
 History thumbnails include current annotations and refresh older drafts.
+Escape cancels capture before or during selection. The editor's trash button
+and Delete on each recent-capture card remove unwanted retained captures.
 Settings shows errors beside their fields, keeps Save/Cancel visible while
 scrolling, and confirms reductions that remove older drafts. A short welcome
 appears once; later launches remain quietly in the system tray.
@@ -79,6 +81,18 @@ does not change its position. An open editor for an evicted capture stays
 available to save or copy and shows that it is outside recent history.
 Clear History asks for confirmation, moves retained drafts to the Recycle
 Bin, and closes their editors. Exported PNGs are separate files.
+
+DELETE AN UNWANTED CAPTURE
+In the editor, click the trash button to delete the current capture from
+Recent Captures and close its editor. In Recent Captures, click Delete
+beneath the capture you want to remove. Confirm Delete capture, or choose
+No to keep it. Deleting from Recent Captures also closes that capture's
+editor if it is open, including any text currently being typed.
+
+Deleted retained captures move to the Windows Recycle Bin. Any PNG files
+you saved and images already copied to the clipboard stay in place.
+Closing an editor normally still keeps its draft in Recent Captures;
+use Delete when you want to discard it instead.
 
 SHORTCUT SETTINGS
 Open Settings. Click the capture shortcut, press the combination, and Save.
