@@ -32,11 +32,12 @@ struct CaptureRecord: Codable {
     var displayDate: String { capturedAt.formatted(date: .abbreviated,time: .shortened) }
 }
 enum CaptureHistoryError: LocalizedError {
-    case invalidDraft, missingCapture
+    case invalidDraft, missingCapture, removalFailed
     var errorDescription: String? {
         switch self {
         case .invalidDraft: return "The stored screenshot draft could not be read."
         case .missingCapture: return "This screenshot is no longer in recent history."
+        case .removalFailed: return "The capture could not be removed from Recent Captures."
         }
     }
 }
@@ -146,6 +147,13 @@ final class CaptureStore {
         try FileManager.default.createDirectory(at: directory,withIntermediateDirectories: true,attributes: [.posixPermissions: 0o700])
         records = []; onChange?()
     }
+    func delete(_ id: UUID, removeDirectory: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) throws {
+        guard contains(id) else { throw CaptureHistoryError.missingCapture }
+        let url = folder(id)
+        try removeDirectory(url)
+        guard !FileManager.default.fileExists(atPath: url.path) else { throw CaptureHistoryError.removalFailed }
+        records.removeAll { $0.id == id }; onChange?()
+    }
     private func thumbnailPNG(_ image: NSImage, marks: [Mark] = []) -> Data? {
         guard image.size.width > 0, image.size.height > 0,
               let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,pixelsWide: 240,pixelsHigh: 150,bitsPerSample: 8,samplesPerPixel: 4,hasAlpha: true,isPlanar: false,colorSpaceName: .deviceRGB,bytesPerRow: 0,bitsPerPixel: 0),
@@ -169,9 +177,9 @@ final class CaptureHistoryButton: NSButton {
     var captureID: UUID?
     var detail = ""
     override func draw(_ dirtyRect: NSRect) {
-        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 12,yRadius: 12)
-        (cell?.isHighlighted == true ? NSColor.systemIndigo.withAlphaComponent(0.1) : .controlBackgroundColor).setFill(); card.fill()
-        NSColor.labelColor.withAlphaComponent(0.1).setStroke(); card.lineWidth = 1; card.stroke()
+        if cell?.isHighlighted == true {
+            NSColor.systemIndigo.withAlphaComponent(0.1).setFill(); NSBezierPath(roundedRect: bounds.insetBy(dx: 1,dy: 1),xRadius: 12,yRadius: 12).fill()
+        }
         let preview = NSRect(x: 12,y: 68,width: bounds.width-24,height: bounds.height-80)
         NSColor.windowBackgroundColor.setFill(); NSBezierPath(roundedRect: preview,xRadius: 7,yRadius: 7).fill()
         if let image {
@@ -187,11 +195,14 @@ final class CaptureHistoryList: NSView { override var isFlipped: Bool { true } }
 final class CaptureHistoryController: NSWindowController, NSWindowDelegate {
     let store: CaptureStore
     let open: (UUID) -> Void
+    let delete: (UUID) -> Bool
+    private(set) var openButtons: [UUID: CaptureHistoryButton] = [:]
+    private(set) var deleteButtons: [UUID: NSButton] = [:]
     let scroll = NSScrollView()
     let list = CaptureHistoryList()
     let summary = NSTextField(labelWithString: "")
-    init(store: CaptureStore, open: @escaping (UUID) -> Void) {
-        self.store = store; self.open = open
+    init(store: CaptureStore, open: @escaping (UUID) -> Void, delete: @escaping (UUID) -> Bool = { _ in false }) {
+        self.store = store; self.open = open; self.delete = delete
         let window = NSWindow(contentRect: NSRect(x: 0,y: 0,width: 840,height: 650),styleMask: [.titled,.closable,.resizable],backing: .buffered,defer: false)
         super.init(window: window); window.contentView = BackgroundView(frame: window.contentView!.bounds); window.title = "Shotlight — Recent Captures"; window.center(); window.isReleasedWhenClosed = false; window.minSize = NSSize(width: 580,height: 300); window.delegate = self
         scroll.hasVerticalScroller = true; scroll.drawsBackground = false; scroll.documentView = list
@@ -207,11 +218,12 @@ final class CaptureHistoryController: NSWindowController, NSWindowDelegate {
     func reload() {
         let origin = scroll.contentView.bounds.origin
         list.subviews.forEach { $0.removeFromSuperview() }
+        openButtons.removeAll(); deleteButtons.removeAll()
         summary.stringValue = "\(store.records.count) captures · Automatically kept on this Mac · Limit \(store.limit)"
         let width = max(540,scroll.contentSize.width)
         let columns = max(1,Int((width-32)/252)), cardWidth = (width-32-CGFloat(columns-1)*12)/CGFloat(columns)
         let rows = (store.records.count+columns-1)/columns
-        list.frame = NSRect(x: 0,y: 0,width: width,height: max(120,CGFloat(rows)*228+20))
+        list.frame = NSRect(x: 0,y: 0,width: width,height: max(120,CGFloat(rows)*268+20))
         if store.records.isEmpty {
             let label = NSTextField(wrappingLabelWithString: "No captures yet. Your next screenshot will appear here automatically.")
             label.frame = NSRect(x: 24,y: 30,width: width-48,height: 60); label.autoresizingMask = [.width]; list.addSubview(label)
@@ -221,13 +233,30 @@ final class CaptureHistoryController: NSWindowController, NSWindowDelegate {
             row.detail = "\(Int(record.imageWidth)) × \(Int(record.imageHeight)) · \(record.marks.count) annotations"; row.isBordered = false
             row.captureID = record.id; row.image = store.thumbnail(record.id); row.image?.size = NSSize(width: 120,height: 75)
             row.imagePosition = .imageLeft; row.imageScaling = .scaleProportionallyDown; row.alignment = .left; row.bezelStyle = .regularSquare; row.font = .systemFont(ofSize: 13)
-            row.frame = NSRect(x: 16+CGFloat(index%columns)*(cardWidth+12),y: CGFloat(index/columns)*228,width: cardWidth,height: 214)
-            row.setAccessibilityLabel("Capture \(record.displayDate)"); list.addSubview(row)
+            let card = SurfaceView(frame: NSRect(x: 16+CGFloat(index%columns)*(cardWidth+12),y: CGFloat(index/columns)*268,width: cardWidth,height: 254))
+            row.frame = NSRect(x: 0,y: 40,width: cardWidth,height: 214)
+            row.setAccessibilityLabel("Capture \(record.displayDate)"); card.addSubview(row); openButtons[record.id] = row
+            let remove = NSButton(title: "Delete", target: self, action: #selector(deleteCapture(_:)))
+            remove.identifier = NSUserInterfaceItemIdentifier(record.id.uuidString); remove.isBordered = false; remove.bezelStyle = .inline
+            remove.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil); remove.imagePosition = .imageLeading
+            remove.contentTintColor = .systemRed; remove.font = .systemFont(ofSize: 12)
+            remove.toolTip = "Move this capture to Trash"; remove.setAccessibilityLabel("Delete capture \(record.displayDate)")
+            remove.frame = NSRect(x: cardWidth-112,y: 6,width: 100,height: 32); card.addSubview(remove); deleteButtons[record.id] = remove
+            list.addSubview(card)
         }
         scroll.contentView.scroll(to: NSPoint(x: 0,y: min(origin.y,max(0,list.frame.height-scroll.contentSize.height))))
         scroll.reflectScrolledClipView(scroll.contentView)
     }
     @objc func openCapture(_ sender: CaptureHistoryButton) { if let id = sender.captureID { open(id) } }
+    @objc func deleteCapture(_ sender: NSButton) {
+        guard let value = sender.identifier?.rawValue, let id = UUID(uuidString: value) else { return }
+        let index = store.records.firstIndex { $0.id == id } ?? 0
+        guard delete(id) else { return }
+        reload()
+        if !store.records.isEmpty, let next = openButtons[store.records[min(index,store.records.count-1)].id] {
+            window?.makeFirstResponder(next); next.scrollToVisible(next.bounds)
+        } else { window?.makeFirstResponder(nil) }
+    }
 }
 
 func historyCheck() -> String {

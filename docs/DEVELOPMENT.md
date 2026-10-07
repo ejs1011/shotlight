@@ -1,6 +1,6 @@
 # Development and handoff
 
-Shotlight has two native applications: macOS 0.7 (Swift/AppKit, Apple silicon, macOS 13+) and Windows 1.2 (C#/.NET 10, WPF/WinForms, Windows 11 x64). Source is organized by platform; history formats and settings are local to each app.
+Shotlight has two native applications: macOS 0.8 (Swift/AppKit, Apple silicon, macOS 13+) and Windows 1.2 (C#/.NET 10, WPF/WinForms, Windows 11 x64). Source is organized by platform; history formats and settings are local to each app.
 
 ## Working across computers
 
@@ -62,7 +62,7 @@ Before relying on a new build, test the applicable platform manually:
 
 - Activate capture while a clock, video, or animation is moving. Confirm the screen stays frozen during selection.
 - Capture on every connected monitor, including monitors with different scaling settings. Drag in both directions; cancel with Escape before clicking and during a drag, then start another capture. On Windows, check both the global shortcut and the tray command.
-- On Windows, use the editor trash button and Delete on a Recent Captures card. Cancel the confirmation once, then confirm deletion with active text. Check that only the chosen draft disappears, its editor closes, it stays absent after restart, and saved PNGs remain. Confirm the retained capture can be found in the Recycle Bin.
+- On either platform, use the editor trash button and Delete on a Recent Captures card. Cancel the confirmation once, then confirm deletion with active text. Check that only the chosen draft disappears, its editor closes, it stays absent after restart, and saved PNGs remain. Confirm the retained capture can be found in Trash on Mac or the Recycle Bin on Windows.
 - Draw each annotation type, type multiple lines inline, edit existing text, and undo/redo.
 - Copy while typing with Close editor after copying both enabled and disabled. Confirm text commits, the button label matches the setting, and the full annotated image pastes correctly into another app.
 - Save a PNG and check the selected area's physical pixel dimensions.
@@ -89,6 +89,8 @@ Windows renders also include the keep-open Copy mode, a short settings window wi
 
 The Windows entry point enables modeless WinForms keyboard processing in the WPF message loop. Escape checks post real keyboard messages to a generated selector before and during a drag; a direct call to the command handler does not verify this integration. Single-capture deletion uses an injected recycle operation in checks, closes that capture's editor without flushing discarded text, and stops autosave before recycling. Failure checks preserve the record and verify that active-text autosave resumes. These checks do not access personal history or the real Recycle Bin.
 
-Windows inline text grows inward at the screenshot's right and bottom edges, retaining that position in the draft and export. Its height includes trailing blank lines so Shift+Enter keeps preceding rows visible. Generated-image checks cover edge typing at several preview scales, font-size changes, multiline caret visibility, commit/reopen/cancel, and retained positions. The `editor-inline-edge` preview shows multiple rows being edited at the bottom-right corner.
+Both platforms' inline text grows inward at the screenshot's right and bottom edges, retaining that position in the draft and export. Its height includes trailing blank lines so Shift+Enter / Shift-Return keeps preceding rows visible. Generated-image checks cover edge typing at several preview scales, font-size changes, multiline caret visibility, commit/reopen/cancel, and retained positions. The `editor-inline-edge` Windows preview and `mac-editor-inline-edge` Mac preview show multiple rows being edited at the bottom-right corner.
 
-Mac interface renders are available with `./macos/artifacts/Shotlight.app/Contents/MacOS/Shotlight --render-previews OUTPUT_DIRECTORY`. This renders native views with generated images and temporary history, including the light and dark editor, a compact editor, the keep-open Copy mode, annotated history, light/dark settings, validation at a short window height, and the welcome screen.
+Mac parity checks dispatch generated Escape events through NSApplication before and during selection, verify that all overlays stop accepting input, and start another capture. Deletion checks use injected removal in a temporary folder, exercise both visible Delete actions, and verify paused autosave during removal, recovery after a failed or incomplete removal, restart state, saved PNG preservation, and discarding an unretained editor. The native Trash operation and real capture/hotkey integration still need manual testing on the target Mac. These checks do not access personal history or the user's Trash.
+
+Mac interface renders are available with `./macos/artifacts/Shotlight.app/Contents/MacOS/Shotlight --render-previews OUTPUT_DIRECTORY`. This renders native views with generated images and temporary history, including the light and dark editor, a compact editor with its trash action, the keep-open Copy mode, active and committed edge text, history cards with Delete buttons, light/dark settings, validation at a short window height, and the welcome screen.
