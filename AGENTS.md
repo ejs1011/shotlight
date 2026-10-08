@@ -18,6 +18,7 @@ Shotlight is a personal, local-only screenshot application. This repository cont
 - Command+C on Mac and Ctrl+C on Windows commit active text and copy the full annotated image. Copy closes the editor by default; Settings on either platform can keep it open instead. Both the button and shortcut honor that preference.
 - Save PNGs with the original pixel dimensions; preview scaling must not reduce exported resolution.
 - Persist new captures before editing and autosave annotations, active text, and undo/redo. Preserve history after copying, saving, or closing.
+- Confirm single-capture deletion, move retained drafts to the platform trash, and close only the deleted capture's editor without saving discarded text. A failed removal keeps the draft editable and resumes autosave. Exported files and clipboard images remain separate.
 - Keep configurable capture shortcuts and history retention (default 50, range 1–500).
 - Keep the application local-only. Do not add an upload service, analytics, or account requirement.
 

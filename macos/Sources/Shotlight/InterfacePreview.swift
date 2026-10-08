@@ -50,6 +50,13 @@ func renderInterfacePreviews(to directory: URL) throws {
     editor.closesAfterCopy = false
     editor.compactTools[Tool.text.rawValue].performClick(nil)
     try render(editor,"mac-editor-copy-open",NSSize(width: 720,height: 550))
+    editor.canvas.beginTextEditing(at: NSPoint(x: 899, y: 1))
+    editor.canvas.textEditor?.insertText("Edge text\nSecond row\nThird row\n", replacementRange: NSRange(location: 0, length: 0))
+    try render(editor,"mac-editor-inline-edge",NSSize(width: 720,height: 550))
+    try render(editor,"mac-editor-inline-edge-dark",NSSize(width: 720,height: 550),dark: true)
+    editor.canvas.finishTextEditing()
+    try render(editor,"mac-editor-edge-committed",NSSize(width: 720,height: 550))
+    editor.canvas.undoMark(); _ = editor.flushArchive()
     for i in 0..<5 { try store.add(image: image,capturedAt: Date().addingTimeInterval(Double(-i-1)*3600)) }
     let history = CaptureHistoryController(store: store,open: { _ in })
     try render(history,"mac-recent-captures")

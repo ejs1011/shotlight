@@ -84,6 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var closesAfterCopy = CopyPreference.closesEditor(in: .standard)
     var captureStore: CaptureStore?
     var historyController: CaptureHistoryController?
+    var recycleCapture: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+    var confirmCaptureDeletion: ((UUID?) -> Bool)?
+    var reportDeleteError: ((Error) -> Void)?
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -159,11 +162,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func showHistory() {
         guard let store = captureStore else { alert("Recent history unavailable","Reopen Shotlight to try loading history again."); return }
-        if historyController == nil { historyController = CaptureHistoryController(store: store) { [weak self] id in self?.openHistory(id) } }
+        if historyController == nil {
+            historyController = CaptureHistoryController(store: store, open: { [weak self] id in self?.openHistory(id) }, delete: { [weak self] id in self?.deleteCapture(id, source: self?.historyController?.window) ?? false })
+        }
         historyController?.reload(); historyController?.showWindow(nil); NSApp.activate(ignoringOtherApps: true)
     }
     func configureEditor(_ editor: EditorController) {
         editor.closesAfterCopy = closesAfterCopy; editors.append(editor)
+        editor.deleteCapture = { [weak self, weak editor] in
+            guard let self, let editor else { return }
+            _ = self.deleteCapture(editor.captureID, source: editor.window, unretainedEditor: editor)
+        }
         editor.onClose = { [weak self,weak editor] in self?.editors.removeAll { $0 === editor } }
         editor.navigate = { [weak self,weak editor] direction in
             guard let self,let editor,let id = editor.captureID,let store = self.captureStore,
@@ -172,6 +181,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let existing = self.editors.first(where: { $0 !== editor && $0.captureID == target.id }) { existing.showWindow(nil); return }
             do { try editor.loadCapture(target.id,store: store) }
             catch { self.alert("Could not reopen screenshot",error.localizedDescription) }
+        }
+    }
+    @discardableResult func deleteCapture(_ id: UUID?, source: NSWindow? = nil, unretainedEditor: EditorController? = nil) -> Bool {
+        let retained = id.map { captureStore?.contains($0) == true } ?? false
+        let confirmed: Bool
+        if let confirmCaptureDeletion { confirmed = confirmCaptureDeletion(id) }
+        else {
+            let alert = NSAlert(); alert.messageText = retained ? "Delete this capture?" : "Discard this capture?"
+            alert.informativeText = retained
+                ? "This capture will move from Recent Captures to Trash, and its editor will close. Saved PNGs and images already copied to the clipboard stay in place."
+                : "This capture is outside Recent Captures. Its editor will close. Saved PNGs and images already copied to the clipboard stay in place."
+            alert.addButton(withTitle: "Cancel"); alert.addButton(withTitle: retained ? "Delete Capture" : "Discard")
+            alert.buttons[1].hasDestructiveAction = true
+            source?.makeKeyAndOrderFront(nil); confirmed = alert.runModal() == .alertSecondButtonReturn
+        }
+        guard confirmed else { return false }
+        let targets = editors.filter { editor in id.map { editor.captureID == $0 } ?? (editor === unretainedEditor) }
+        // Trash operations can pump the run loop. Pause before moving files so
+        // an active text draft cannot be saved into a capture being deleted.
+        targets.forEach { $0.pauseArchiveSave() }
+        do {
+            if let id, let store = captureStore, store.contains(id) { try store.delete(id, removeDirectory: recycleCapture) }
+            targets.forEach { $0.closeAfterDelete() }; return true
+        } catch {
+            targets.forEach { $0.resumeArchiveSave() }
+            if let reportDeleteError { reportDeleteError(error) } else { alert("Could not delete capture", error.localizedDescription) }
+            return false
         }
     }
     @discardableResult func openCaptured(image: NSImage,originalPNG: Data?) -> EditorController {
@@ -255,6 +291,7 @@ final class Canvas: NSView, NSTextViewDelegate {
     var textEditor: NSTextView?
     var editingIndex: Int?
     var editingTop = NSPoint.zero
+    private var textAnchor = NSPoint.zero
     var editingColor = NSColor.systemRed
     var editingWidth: CGFloat = 4
     var current: Mark?
@@ -324,8 +361,16 @@ final class Canvas: NSView, NSTextViewDelegate {
         [.font: NSFont.systemFont(ofSize: max(16, width * 6), weight: .semibold), .foregroundColor: color]
     }
     func textSize(_ text: String, width: CGFloat) -> NSSize {
-        let size = ((text.isEmpty ? " " : text) as NSString).size(withAttributes: textAttributes(color: .black, width: width))
-        return NSSize(width: ceil(size.width) + 2, height: ceil(size.height) + 2)
+        // Match NSTextView's layout, including its extra line fragment after a
+        // trailing newline. NSString sizing omits that editable blank row.
+        let storage = NSTextStorage(string: text, attributes: textAttributes(color: .black, width: width))
+        let layout = NSLayoutManager(), container = NSTextContainer(containerSize: NSSize(width: 100000, height: 100000))
+        container.lineFragmentPadding = 0; layout.addTextContainer(container); storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        let measured = layout.usedRect(for: container)
+        let font = NSFont.systemFont(ofSize: max(16, width*6), weight: .semibold)
+        let height = max(layout.defaultLineHeight(for: font), measured.maxY, layout.extraLineFragmentRect.maxY)
+        return NSSize(width: ceil(measured.width) + 2, height: ceil(height) + 2)
     }
     func recordChange() { history.append(marks); undone.removeAll() }
     func beginTextEditing(at point: NSPoint, index: Int? = nil) {
@@ -336,6 +381,7 @@ final class Canvas: NSView, NSTextViewDelegate {
         if let mark { fontSize = max(16, mark.width*6) }
         if let mark { editingTop = NSPoint(x: mark.points[0].x, y: mark.points[0].y + textSize(mark.text, width: mark.width).height) }
         else { editingTop = point }
+        textAnchor = editingTop
         let editor = InlineTextView(frame: .zero)
         editor.isRichText = false; editor.drawsBackground = false
         editor.isAutomaticQuoteSubstitutionEnabled = false; editor.isAutomaticDashSubstitutionEnabled = false
@@ -355,7 +401,10 @@ final class Canvas: NSView, NSTextViewDelegate {
         editor.textColor = editingColor; editor.insertionPointColor = editingColor
         editor.typingAttributes = textAttributes(color: editingColor, width: editingWidth)
         let size = textSize(editor.string, width: editingWidth)
-        editor.frame = NSRect(x: editingTop.x, y: editingTop.y - size.height, width: max(40, size.width + 8), height: size.height)
+        let frameSize = NSSize(width: max(40, size.width + 8), height: size.height)
+        let origin = NSPoint(x: min(max(0, textAnchor.x), max(0, bounds.width-frameSize.width)), y: min(max(0, textAnchor.y-frameSize.height), max(0, bounds.height-frameSize.height)))
+        editor.frame = NSRect(origin: origin, size: frameSize)
+        editingTop = NSPoint(x: origin.x, y: origin.y+frameSize.height)
         changed?()
     }
     func textDidChange(_ notification: Notification) { refreshTextEditor() }
@@ -373,7 +422,7 @@ final class Canvas: NSView, NSTextViewDelegate {
         if !cancel {
             if let index = editingIndex {
                 if text.isEmpty { recordChange(); marks.remove(at: index) }
-                else if text != marks[index].text || editingColor != marks[index].color || editingWidth != marks[index].width {
+                else if text != marks[index].text || editingColor != marks[index].color || editingWidth != marks[index].width || editor.frame.origin != marks[index].points[0] {
                     recordChange()
                     marks[index] = Mark(tool: .text, points: [NSPoint(x: editingTop.x, y: editingTop.y - textSize(text, width: editingWidth).height)], color: editingColor, width: editingWidth, text: text)
                 }
@@ -425,6 +474,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     var captureID: UUID?
     var archive: CaptureStore?
     var pendingSave: DispatchWorkItem?
+    private var archiveSavePaused = false
     var lastArchiveError: String?
     var navigate: ((Int) -> Void)?
     let scroll = PreviewScrollView()
@@ -435,6 +485,8 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     let widthMenu = NSMenu()
     let captureLabel = NSTextField(labelWithString: "")
     var onClose: (() -> Void)?
+    var deleteCapture: (() -> Void)?
+    var deleteButton: NSButton!
     var undoButton: NSButton!
     var redoButton: NSButton!
     var copyButton: CompactButton!
@@ -477,6 +529,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         redoButton = ShotlightUI.icon("arrow.uturn.forward",label: "Redo (⇧⌘Z)",target: self,action: #selector(redo)); redoButton.keyEquivalent = "z"; redoButton.keyEquivalentModifierMask = [.command,.shift]
         copyButton = ShotlightUI.textButton("Copy & Close", symbol: "doc.on.doc", width: 128, target: self, action: #selector(copyImage)); copyButton.primary = true
         let save = ShotlightUI.icon("square.and.arrow.down",label: "Save PNG (⌘S)",target: self,action: #selector(saveImage)); save.keyEquivalent = "s"
+        deleteButton = ShotlightUI.icon("trash", label: "Delete capture from Recent Captures", target: self, action: #selector(deleteCurrentCapture))
         let capture = ShotlightUI.icon("viewfinder",label: "New capture",target: self,action: #selector(newCapture))
         let more = ShotlightUI.icon("ellipsis",label: "More — history, zoom & settings",target: self,action: #selector(showMoreMenu(_:)))
         moreMenu.autoenablesItems = false
@@ -491,7 +544,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         for percent in [25,50,75,100,150,200] { let item = NSMenuItem(title: "\(percent)%",action: #selector(selectZoom(_:)),keyEquivalent: ""); item.tag = percent; item.target = self; item.state = percent == 100 ? .on : .off; zoomMenu.addItem(item) }
         moreMenu.addItem(zoom)
         let settings = NSMenuItem(title: "Settings…",action: #selector(openSettings),keyEquivalent: ""); settings.target = self; moreMenu.addItem(settings)
-        let toolbar = NSStackView(views: [capture,ShotlightUI.divider(),tools,ShotlightUI.divider(),color,sizeButton!,ShotlightUI.divider(),undoButton,redoButton,ShotlightUI.divider(),copyButton!,save,more]); toolbar.spacing = 5; toolbar.alignment = .centerY
+        let toolbar = NSStackView(views: [capture,ShotlightUI.divider(),tools,ShotlightUI.divider(),color,sizeButton!,ShotlightUI.divider(),undoButton,redoButton,ShotlightUI.divider(),copyButton!,save,deleteButton!,more]); toolbar.spacing = 4; toolbar.alignment = .centerY
         let surface = ShotlightUI.card(toolbar,padding: 7); surface.wantsLayer = true; surface.layer?.shadowOpacity = 0.14; surface.layer?.shadowRadius = 14; surface.layer?.shadowOffset = CGSize(width: 0,height: -3)
         surface.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(surface)
         NSLayoutConstraint.activate([surface.centerXAnchor.constraint(equalTo: root.centerXAnchor),surface.bottomAnchor.constraint(equalTo: root.bottomAnchor,constant: -12)])
@@ -518,10 +571,10 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     }
     func scheduleArchiveSave() {
         pendingSave?.cancel()
-        guard let id = captureID,archive?.contains(id) == true else { return }
+        guard !archiveSavePaused, let id = captureID,archive?.contains(id) == true else { return }
         captureLabel.stringValue = "Saving to Recent Captures…"
         let task = DispatchWorkItem { [weak self] in
-            guard let self,let id = self.captureID,let archive = self.archive,archive.contains(id) else { return }
+            guard let self, !self.archiveSavePaused, let id = self.captureID,let archive = self.archive,archive.contains(id) else { return }
             do { try archive.save(id,marks: self.canvas.draftMarks(),undoHistory: self.canvas.draftUndoHistory(),redoHistory: self.canvas.draftRedoHistory()); self.lastArchiveError = nil; self.updateNavigation() }
             catch { self.lastArchiveError = error.localizedDescription; self.captureLabel.stringValue = "Draft not retained — save or copy"; self.captureLabel.isHidden = false }
         }
@@ -529,6 +582,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     }
     @discardableResult func flushArchive() -> Bool {
         pendingSave?.cancel(); pendingSave = nil
+        guard !archiveSavePaused else { return true }
         guard let id = captureID,let archive,archive.contains(id) else { return true }
         do { try archive.save(id,marks: canvas.draftMarks(),undoHistory: canvas.draftUndoHistory(),redoHistory: canvas.draftRedoHistory()); lastArchiveError = nil; updateNavigation(); return true }
         catch {
@@ -537,6 +591,13 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         }
     }
     func detachArchive() { pendingSave?.cancel(); pendingSave = nil; archive = nil; captureID = nil; updateNavigation() }
+    func pauseArchiveSave() { archiveSavePaused = true; pendingSave?.cancel(); pendingSave = nil }
+    func resumeArchiveSave() { archiveSavePaused = false; scheduleArchiveSave() }
+    func closeAfterDelete() {
+        pauseArchiveSave(); canvas.changed = nil; canvas.finishTextEditing(cancel: true); detachArchive()
+        window?.isDocumentEdited = false; window?.close()
+    }
+    @objc func deleteCurrentCapture() { deleteCapture?() }
     func updateNavigation() {
         guard let archive,let id = captureID,let index = archive.records.firstIndex(where: { $0.id == id }) else {
             previousButton?.isEnabled = false; nextButton?.isEnabled = false; captureLabel.stringValue = "Outside recent history — save or copy"; captureLabel.isHidden = false; return
@@ -722,7 +783,7 @@ func keyboardCheck() -> String {
 
 let app = NSApplication.shared
 if CommandLine.arguments.contains("--run-checks") {
-    let result = exportCheck() + " " + keyboardCheck() + " " + historyCheck() + " " + frozenCaptureCheck() + " " + compactToolbarCheck() + " " + interfaceBehaviorCheck()
+    let result = [exportCheck(), keyboardCheck(), historyCheck(), frozenCaptureCheck(), compactToolbarCheck(), interfaceBehaviorCheck(), inlineTextVisibilityCheck(), captureCancellationCheck(), captureDeletionCheck()].joined(separator: "\n")
     print(result)
     exit(result.contains("FAIL:") ? 1 : 0)
 }

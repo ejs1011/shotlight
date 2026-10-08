@@ -1,8 +1,18 @@
-SHOTLIGHT 0.7 — frozen screenshot capture, annotation, and recent history
+SHOTLIGHT 0.8 — frozen screenshot capture, annotation, and recent history
 
 Requires macOS 13 or later and an Apple silicon Mac.
 
-WHAT IS NEW IN 0.7
+WHAT IS NEW IN 0.8
+Delete an unwanted capture using the editor's trash button or Delete on
+its Recent Captures card. Confirmed deletion moves the draft to Trash,
+closes that editor, and leaves saved PNGs and clipboard images in place.
+Inline text grows inward at image edges, including after font changes.
+Shift-Return keeps all rows and the trailing blank row visible. The live
+position is preserved when autosaving, committing, reopening, and exporting.
+Escape cancels before or during selection, closes every display overlay,
+and prevents a late mouse release from creating a capture.
+
+ALSO INCLUDED
 Oversized captures open fitted to the editor. Visible Fit / 100% controls
 and a percentage readout adjust the preview without changing PNG pixels.
 The toolbar shows stroke widths in px and text sizes in pt. Copy is labeled
@@ -21,7 +31,8 @@ your capture shortcut (Control–Shift–S by default). The whole desktop is
 captured first and stays frozen while you drag a rectangle. Releasing the
 mouse crops that original snapshot and opens the annotation editor.
 Moving content cannot change the screenshot while you select the area.
-Escape cancels capture. Allow screen recording if macOS requests it.
+Escape cancels capture before clicking or during a drag. You can start
+another capture immediately. Allow screen recording if macOS requests it.
 
 Every connected display gets its own frozen image. Start a selection on
 the display you want to capture; selections stay within that display.
@@ -38,6 +49,15 @@ reflect the editable draft, including undo and active text autosaves.
 Previous moves to an older capture; Next moves to a newer one.
 Closing, saving, or copying a capture keeps it in history.
 History survives quitting and reopening Shotlight.
+
+DELETE AN UNWANTED CAPTURE
+Click the editor's trash button or Delete beneath a Recent Captures card.
+Choose Cancel to keep editing, or Delete Capture to move that retained
+capture to Trash and close its editor, including any active text edit.
+Only the chosen capture is removed. Saved PNGs and copied images remain.
+If removal fails, the editor stays open and autosave resumes. A capture
+outside history can be discarded with the same editor action.
+Closing an editor normally continues to keep its draft in Recent Captures.
 
 Annotations are stored separately from the original screenshot, so text
 remains editable. Undo/redo history is retained as well. Drawing changes
@@ -63,6 +83,9 @@ Click existing text with the Text tool to edit it again. Clear its contents
 and commit to remove it. Color and the text-size control update text live.
 Text offers 16, 24, and 48 pt; drawing tools offer 2, 4, and 8 px.
 Changing text size leaves your drawing stroke width unchanged.
+Text grows inward at the screenshot's right and bottom edges as you type.
+Trailing blank rows remain visible after Shift-Return. That position stays
+the same when the text is retained, committed, reopened, or exported.
 
 Command–C and the labeled Copy button export an annotated PNG to the
 clipboard. Text being edited is committed before copying. By default copying
@@ -120,3 +143,11 @@ and preserving exported pixel dimensions. Existing checks cover the thumbnail
 browser, recovering an unexported capture
 with its annotations, automatic saving while typing, Previous/Next,
 retention settings, and clearing the generated test history to Trash.
+Parity checks dispatch Escape before and during a drag, reject late events,
+and start another capture. They also verify both Delete actions, cancelled
+and failed removals, autosave pause/recovery, saved PNGs, restart, empty
+history, and unretained discard using injected removal in temporary storage.
+Text checks cover edge typing at multiple scales, font changes, trailing
+blank rows, retained positions, cancel/undo/redo, and Retina PNG rendering.
+The native Trash operation, real screen capture, mixed displays, shortcuts,
+and pasting into other apps still need a manual check on your Mac.

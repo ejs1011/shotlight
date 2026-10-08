@@ -113,6 +113,10 @@ final class FrozenSelectionWindow: NSWindow {
     var cancelCapture: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 { cancelCapture?(); return true }
+        return super.performKeyEquivalent(with: event)
+    }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { cancelCapture?() } else { super.keyDown(with: event) }
     }
@@ -126,6 +130,7 @@ final class FrozenSelectionView: NSView {
     var selection: NSRect?
     var selected: ((NSRect) -> Void)?
     var cancelled: (() -> Void)?
+    private(set) var finished = false
     init(snapshot: FrozenScreen) {
         self.snapshot = snapshot; background = snapshot.image
         super.init(frame: NSRect(origin: .zero, size: snapshot.size))
@@ -166,25 +171,27 @@ final class FrozenSelectionView: NSView {
         return NSPoint(x: min(max(p.x, 0), bounds.width), y: min(max(p.y, 0), bounds.height))
     }
     override func mouseDown(with event: NSEvent) {
+        guard !finished else { return }
         window?.makeKey(); window?.makeFirstResponder(self)
         anchor = boundedPoint(event); selection = nil; needsDisplay = true
     }
     override func mouseDragged(with event: NSEvent) {
-        guard let anchor else { return }
+        guard !finished, let anchor else { return }
         let p = boundedPoint(event)
         selection = NSRect(x: min(anchor.x,p.x), y: min(anchor.y,p.y), width: abs(p.x-anchor.x), height: abs(p.y-anchor.y))
         needsDisplay = true
     }
     override func mouseUp(with event: NSEvent) {
-        guard anchor != nil else { return }
+        guard !finished, anchor != nil else { return }
         mouseDragged(with: event); anchor = nil
         guard let selection, selection.width >= 2, selection.height >= 2 else { self.selection = nil; needsDisplay = true; return }
-        selected?(selection)
+        finished = true; selected?(selection)
     }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { cancelled?() } else { super.keyDown(with: event) }
     }
     override func cancelOperation(_ sender: Any?) { cancelled?() }
+    func finishSelection() { finished = true; anchor = nil; selection = nil }
 }
 
 final class FrozenCaptureController {
@@ -220,7 +227,7 @@ final class FrozenCaptureController {
     private func finish(image: NSImage?, png: Data?) {
         guard let completion else { return }
         self.completion = nil
-        windows.forEach { $0.orderOut(nil); $0.close() }; windows.removeAll()
+        windows.forEach { ($0.contentView as? FrozenSelectionView)?.finishSelection(); $0.orderOut(nil); $0.close() }; windows.removeAll()
         if image == nil { previousApp?.activate(options: []) }
         completion(image, png)
     }

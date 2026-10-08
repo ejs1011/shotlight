@@ -11,19 +11,20 @@ Download an app ZIP from [Releases](https://github.com/ejs1011/shotlight/release
 
 These are personal builds without a paid publisher certificate or Apple notarization. The Mac app is locally signed.
 
-The current sources are **Mac 0.7** and **Windows 1.2**, with the UI changes described below. The published Mac 0.6 and Windows 1.1 downloads predate them; build the current source using the instructions below.
+The current sources are **Mac 0.8** and **Windows 1.2**, with the UI changes described below. The published Mac 0.6 and Windows 1.1 downloads predate them; build the current source using the instructions below.
 
 ## Features
 
 - Freeze the desktop before drawing the capture rectangle; select an area on any connected display.
 - A compact floating toolbar on both platforms. Both use a labeled Copy action, contextual stroke/font sizes, and visible Fit/100% preview controls.
 - Pen, arrow, rectangle, and editable text directly on the screenshot.
+- Inline text grows inward at screenshot edges and keeps trailing blank rows visible. Escape cancels capture before or during selection on both platforms.
 - History and settings in the toolbar’s **More (•••)** menu. Both show the zoom percentage and automatically fit oversized captures.
 - Configurable global capture shortcut, initially **Ctrl+Shift+S**.
 - **Command+C** on Mac or **Ctrl+C** on Windows copies the annotated screenshot and closes its editor by default. Settings on either platform can keep the editor open after copying; the button label changes to **Copy**.
 - Save PNGs at the original pixel resolution.
 - Automatically retain recent captures, editable annotations, and undo/redo across restarts. Keep 50 by default, configurable from 1 to 500. Thumbnails include annotations, and settings confirm reductions that remove older drafts.
-- On Windows, delete individual captures from the editor or Recent Captures. Deleted captures move to the Recycle Bin.
+- Delete individual captures from the editor or Recent Captures. Deleted captures move to Trash on Mac or the Recycle Bin on Windows; saved PNGs stay in place.
 - No upload service, account, or analytics.
 
 Detailed controls and storage locations: [macOS guide](macos/README.txt) · [Windows guide](windows/README.txt).
